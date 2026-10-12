@@ -17,6 +17,10 @@ const shopeeProducts = require('./services/shopee-products');
 const translation = require('./services/translation');
 const autopilot = require('./services/autopilot');
 const activity = require('./services/activity');
+const stats = require('./services/stats');
+const cleanup = require('./services/cleanup');
+const engage = require('./services/engage');
+const accounts = require('./services/accounts');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,6 +54,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 discovery.startScheduler();
 autopilot.start();
+stats.start();
+cleanup.start();
+engage.start();
 
 app.get('/api/tiktok/account', async (req, res) => res.json(await tiktokAccount.status()));
 app.post('/api/tiktok/login', async (req, res) => {
@@ -118,8 +125,11 @@ app.get('/api/roxy-profiles', async (req, res) => {
     const response = await fetch(`http://127.0.0.1:${config.api_port || 50000}/browser/list_v3?workspaceId=${encodeURIComponent(config.workspace_id)}&page_index=1&page_size=100`,
       { headers: { token }, signal: AbortSignal.timeout(5000) });
     const rows = (await response.json()).data?.rows || [];
-    const topics = db.prepare('SELECT name, roxy_profile_id FROM topics').all();
-    res.json({ profiles: rows.map((row) => ({ id: row.dirId, name: row.windowName, topic: topics.find((t) => t.roxy_profile_id === row.dirId)?.name || '' })) });
+    const known = accounts.list();
+    res.json({ profiles: rows.map((row) => {
+      const account = known.find((a) => a.profile_id === row.dirId);
+      return { id: row.dirId, name: row.windowName, topic: account?.topic_name || '', topicId: account?.topic_id || null };
+    }) });
   } catch (error) { res.json({ profiles: [], error: `RoxyBrowser chưa mở hoặc API tắt (${error.message})` }); }
 });
 // One click from topic + account to posted video: pick the best Douyin videos (scanning first if
@@ -134,11 +144,63 @@ app.post('/api/full-run', async (req, res) => {
     const jobs = discovery.quickTopic(topicId, count, true);
     if (!['prepare', 'post'].includes(mode)) throw new Error('Chế độ không hợp lệ');
     // prepare: stop before approval so the user posts; post: auto-approve and let the schedule post.
+    accounts.ensure(topicId, accountProfile);
     for (const job of jobs) db.prepare('UPDATE reup_jobs SET auto_full = ?, account_profile = ? WHERE id = ?').run(mode === 'post' ? 1 : 2, accountProfile, job.jobId);
     if (mode === 'post') autopilot.saveConfig({ enabled: true });
     res.status(202).json({ jobs, translator: require('./services/machine-translate').provider() });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/engage', (req, res) => res.json(engage.snapshot()));
+app.patch('/api/engage', (req, res) => {
+  try { res.json(engage.saveConfig(req.body || {})); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/engage/discover', async (req, res) => {
+  try { res.json(await engage.discover(Number(req.body?.topicId), req.body?.query)); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/engage/tasks/:id', (req, res) => {
+  try { res.json(engage.update(Number(req.params.id), req.body || {})); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/engage/approve', (req, res) => {
+  try { res.json(engage.setStatus(req.body?.ids, 'approved')); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/engage/skip', (req, res) => {
+  try { res.json(engage.setStatus(req.body?.ids, 'skipped')); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/engage/clear', (req, res) => res.json(engage.clearDone()));
+app.get('/api/cleanup', (req, res) => res.json(cleanup.status()));
+app.get('/api/cleanup/items', (req, res) => res.json(cleanup.items()));
+app.post('/api/cleanup/media', (req, res) => {
+  try { res.json(cleanup.removeMedia(req.body?.jobIds)); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/cleanup/delete', (req, res) => {
+  try { res.json(cleanup.removeRecords(req.body?.jobIds)); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/cleanup/candidates', (req, res) => res.json(cleanup.removeOldCandidates()));
+app.post('/api/cleanup/run', (req, res) => {
+  try { res.json(cleanup.run()); } catch (error) { res.status(500).json({ error: error.message }); }
+});
+app.patch('/api/cleanup', (req, res) => {
+  try { res.json(cleanup.saveConfig(req.body || {})); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/stats', (req, res) => res.json(stats.summary()));
+app.post('/api/stats/refresh', (req, res) => {
+  if (stats.running()) return res.status(409).json({ error: 'Đang cập nhật thống kê' });
+  stats.refresh().then((result) => console.log(`[Thống kê] đọc ${result.read}/${result.posts} bài`))
+    .catch((error) => console.error(`[Thống kê] ${error.message}`));
+  res.status(202).json({ started: true });
+});
+// TikTok accounts that post a topic's videos; the autopilot spreads each topic's queue across its active ones.
+app.get('/api/accounts', (req, res) => res.json({ accounts: accounts.list(), lowViews: accounts.LOW_VIEWS }));
+app.post('/api/accounts', (req, res) => {
+  try { res.status(201).json(accounts.save(req.body || {})); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/accounts/:id', (req, res) => {
+  try { res.json(accounts.save(req.body || {}, Number(req.params.id))); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.delete('/api/accounts/:id', (req, res) => {
+  try { accounts.remove(Number(req.params.id)); res.json({ ok: true }); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/autopilot/plan', (req, res) => res.json(autopilot.plan()));
 app.get('/api/autopilot', (req, res) => res.json(autopilot.snapshot()));
 app.patch('/api/autopilot', (req, res) => {
   try { res.json(autopilot.saveConfig(req.body || {})); }
@@ -199,6 +261,8 @@ app.post('/api/douyin/discovery/candidates/:id/dismiss', (req, res) => {
 });
 
 db.prepare("UPDATE reup_jobs SET status = 'queued', error = '' WHERE status = 'downloading'").run();
+// Unattended runs interrupted by a shutdown go back one step so autopilot dubs them again by itself.
+db.prepare("UPDATE reup_jobs SET status = 'source_ready', error = '' WHERE status = 'dubbing' AND auto_full > 0").run();
 db.prepare("UPDATE reup_jobs SET status = 'failed', error = 'Máy chủ khởi động lại; hãy thử lại bước này' WHERE status = 'dubbing'").run();
 setImmediate(reup.drainDownloads);
 db.prepare("UPDATE reup_publications SET status = 'failed', error = 'Máy chủ khởi động lại; kiểm tra trên nền tảng trước khi đăng lại' WHERE status = 'running'").run();

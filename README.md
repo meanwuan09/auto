@@ -183,6 +183,8 @@ Mở trình duyệt: **http://localhost:3210** (đổi port bằng biến môi t
 
 Lần đầu chạy, bấm nút **"Cài yt-dlp"** và **"Cài ffmpeg"** trên trang web (tự tải về thư mục `tools/`).
 
+Hằng ngày trên Windows: bấm đúp `start-auto.cmd` (hoặc lối tắt trên Desktop). File này mở RoxyBrowser, chạy LUNO (cổng 8756) và dashboard (cổng 3210) trong hai cửa sổ thu nhỏ rồi mở trang web; phần nào đang chạy thì bỏ qua. Token Roxy đặt trong `data/roxy-browser.json` (khóa `api_token`), không ghi vào file khởi động. Log nằm ở `%TEMP%\dashboard.log` và `%TEMP%\luno.log`.
+
 ## Quy trình sử dụng
 
 1. **Mở giả lập**: LDPlayer → tạo nhiều instance (mỗi instance 1 account TikTok) → cài TikTok vào từng máy → bật máy.

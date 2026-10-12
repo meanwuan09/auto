@@ -49,7 +49,7 @@ function renderTopics() {
   if ($('topic-list').contains(document.activeElement)) return;
   $('topic-list').innerHTML = topics.map((t) => `<div class="topic-card">
     <strong>${esc(t.name)}</strong>
-    <label>Profile Roxy<input id="topic-profile-${t.id}" value="${esc(t.roxy_profile_id)}" maxlength="64"></label>
+    <small>${(state.accounts || []).filter((a) => a.topic_id === t.id && a.status === 'active').length} tài khoản đang đăng</small>
     <label>Từ khóa lọc Douyin<input id="topic-keywords-${t.id}" value="${esc(t.keywords)}" maxlength="1000"></label>
     <label>Hashtag xu hướng TikTok<input id="topic-tags-${t.id}" value="${esc(t.trend_tags)}" maxlength="1000"></label>
     <label>Từ khóa sản phẩm Shopee<input id="topic-shopee-${t.id}" value="${esc(t.shopee_keywords)}" maxlength="1000"></label>
@@ -57,9 +57,55 @@ function renderTopics() {
   </div>`).join('');
 }
 
+// ---------- TÀI KHOẢN ĐĂNG ----------
+const ACCOUNT_STATUS = { warming: 'Đang nuôi', active: 'Đang đăng', paused: 'Tạm dừng' };
+function renderAccounts() {
+  const list = state.accounts || [];
+  const topicSelect = $('account-new-topic');
+  if (document.activeElement !== topicSelect) {
+    const value = topicSelect.value;
+    topicSelect.innerHTML = (state.discovery.topics || []).map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    if (value) topicSelect.value = value;
+  }
+  $('account-profile-options').innerHTML = (roxyProfiles || []).filter((p) => !list.some((a) => a.profile_id === p.id))
+    .map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  $('accounts-status').textContent = `${list.filter((a) => a.status === 'active').length}/${list.length} đang đăng`;
+  if ($('accounts-body').contains(document.activeElement)) return;
+  const limit = state.autopilot?.postsPerDay;
+  $('accounts-body').innerHTML = list.map((a) => `<tr>
+    <td><input id="account-name-${a.id}" value="${esc(a.name)}" maxlength="80" aria-label="Tên tài khoản"></td>
+    <td><select id="account-topic-${a.id}" aria-label="Chủ đề">${(state.discovery.topics || []).map((t) => `<option value="${t.id}" ${t.id === a.topic_id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></td>
+    <td><input id="account-profile-${a.id}" value="${esc(a.profile_id)}" maxlength="64" aria-label="Profile Roxy"></td>
+    <td><select id="account-status-${a.id}" aria-label="Trạng thái">${Object.entries(ACCOUNT_STATUS).map(([value, label]) => `<option value="${value}" ${value === a.status ? 'selected' : ''}>${label}</option>`).join('')}</select>${a.pause_reason ? `<small class="error-line">${esc(a.pause_reason)}</small>` : ''}</td>
+    <td><input id="account-limit-${a.id}" type="number" min="1" max="6" value="${a.daily_limit ?? ''}" placeholder="${limit ?? ''}" aria-label="Số bài mỗi ngày" class="account-limit"></td>
+    <td>${a.postedToday}<small>${a.lastPost ? 'Gần nhất ' + esc(new Date(`${a.lastPost}Z`).toLocaleString('vi-VN')) : 'Chưa đăng'}</small></td>
+    <td><div class="td-actions"><button class="btn small" onclick="saveAccount(${a.id})">Lưu</button><button class="btn small danger" onclick="removeAccount(${a.id})">Xóa</button></div></td>
+  </tr>`).join('') || '<tr><td colspan="7" class="empty-row">Chưa có tài khoản. Thêm profile Roxy đã đăng nhập TikTok ở dưới.</td></tr>';
+}
+async function saveAccount(id) {
+  try {
+    await api(`/api/accounts/${id}`, 'PATCH', { name: $(`account-name-${id}`).value, topicId: Number($(`account-topic-${id}`).value), profileId: $(`account-profile-${id}`).value,
+      status: $(`account-status-${id}`).value, dailyLimit: $(`account-limit-${id}`).value === '' ? null : Number($(`account-limit-${id}`).value) });
+    document.activeElement?.blur();
+    await refresh();
+  } catch (error) { alert(error.message); }
+}
+async function removeAccount(id) {
+  if (!confirm('Xóa tài khoản này khỏi danh sách đăng? Video đang chờ riêng cho nó sẽ chuyển về hàng đợi chung của chủ đề.')) return;
+  try { await api(`/api/accounts/${id}`, 'DELETE'); await refresh(); } catch (error) { alert(error.message); }
+}
+$('account-add').onclick = async () => {
+  try {
+    await api('/api/accounts', 'POST', { name: $('account-new-name').value, topicId: Number($('account-new-topic').value), profileId: $('account-new-profile').value, status: $('account-new-status').value });
+    $('account-new-name').value = '';
+    $('account-new-profile').value = '';
+    await refresh();
+  } catch (error) { alert(error.message); }
+};
+
 async function saveTopic(id) {
   try {
-    await api(`/api/topics/${id}`, 'PATCH', { roxyProfileId: $(`topic-profile-${id}`).value, keywords: $(`topic-keywords-${id}`).value, trendTags: $(`topic-tags-${id}`).value, shopeeKeywords: $(`topic-shopee-${id}`).value });
+    await api(`/api/topics/${id}`, 'PATCH', { keywords: $(`topic-keywords-${id}`).value, trendTags: $(`topic-tags-${id}`).value, shopeeKeywords: $(`topic-shopee-${id}`).value });
     document.activeElement?.blur();
     await refresh();
   } catch (error) { alert(error.message); }
@@ -166,7 +212,7 @@ function openAutopilotSettings() {
         <label class="check-line"><input id="ap-rights" type="checkbox" ${a.refill ? 'checked' : ''}> Tôi có quyền sử dụng và đăng lại các video Douyin được tự chọn</label>
       </fieldset>
       <label>Khung giờ đăng trong ngày<input id="ap-slots" value="${esc((a.slots || []).join(', '))}" placeholder="VD: 08:00, 12:00, 19:30">
-        <small>Mỗi kênh đăng tối đa 1 bài trong 45 phút sau mỗi mốc. Để trống để dùng khoảng giờ bên dưới.</small></label>
+        <small>Mỗi kênh đăng tối đa 1 bài trong 45 phút sau mỗi mốc. Khi bật "Tự lấy video", máy chuẩn bị sẵn video cho mọi khung giờ trong 24 giờ tới. Để trống để dùng khoảng giờ bên dưới.</small></label>
       <div class="settings-presets">${['07:30, 12:00, 20:00', '11:30, 19:00', '09:00, 13:00, 18:00, 21:30'].map((p) => `<button class="btn small" type="button" onclick="$('ap-slots').value='${p}'">${p}</button>`).join('')}</div>
       <label>Tối đa bài/ngày mỗi kênh<input id="ap-posts" type="number" min="1" max="6" value="${a.postsPerDay ?? 2}"></label>
       <fieldset><legend>Khi không đặt khung giờ</legend>
@@ -257,19 +303,21 @@ async function renderFullRun() {
     const data = await api('/api/roxy-profiles').catch(() => ({ profiles: [], error: 'Không đọc được danh sách profile' }));
     roxyProfiles = data.profiles;
     $('full-run-account').innerHTML = roxyProfiles.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.topic ? ` · ${esc(p.topic)}` : ''}</option>`).join('')
-      || topics.filter((t) => t.roxy_profile_id).map((t) => `<option value="${esc(t.roxy_profile_id)}">${esc(t.roxy_profile_id.slice(0, 8))}… · ${esc(t.name)}</option>`).join('');
+      || (state.accounts || []).map((a) => `<option value="${esc(a.profile_id)}">${esc(a.name || a.profile_id.slice(0, 8) + '…')} · ${esc(a.topic_name)}</option>`).join('');
     if (data.error) $('full-run-status').textContent = data.error;
     selectTopicAccount();
+    renderAccounts();
   }
 }
 // Picking a channel preselects the content type that channel is set up for, and vice versa.
 function selectAccountTopic() {
-  const topic = (state.discovery.topics || []).find((t) => t.roxy_profile_id === $('full-run-account').value);
-  if (topic) $('full-run-topic').value = topic.id;
+  const account = (state.accounts || []).find((a) => a.profile_id === $('full-run-account').value);
+  if (account) $('full-run-topic').value = account.topic_id;
 }
 function selectTopicAccount() {
-  const topic = (state.discovery.topics || []).find((t) => t.id === Number($('full-run-topic').value));
-  if (topic?.roxy_profile_id && [...$('full-run-account').options].some((o) => o.value === topic.roxy_profile_id)) $('full-run-account').value = topic.roxy_profile_id;
+  const options = [...$('full-run-account').options].map((o) => o.value);
+  const account = (state.accounts || []).find((a) => a.topic_id === Number($('full-run-topic').value) && a.status === 'active' && options.includes(a.profile_id));
+  if (account) $('full-run-account').value = account.profile_id;
 }
 async function startFullRun(mode) {
   const count = Number($('full-run-count').value) || 2;
@@ -351,6 +399,282 @@ function openDouyinCookie() {
 }
 $('discovery-cookie').onclick = openDouyinCookie;
 renderDouyinLogin();
+
+// ---------- THỐNG KÊ ----------
+let statsData = null;
+let statsSort = { key: 'views', desc: true };
+const fmtNum = (n) => n == null ? '—' : Number(n).toLocaleString('vi-VN');
+const fmtSigned = (n) => n == null ? '—' : n > 0 ? `+${fmtNum(n)}` : fmtNum(n);
+
+async function loadStats() {
+  try { statsData = await api('/api/stats'); } catch { return; }
+  renderStats();
+}
+
+function renderStats() {
+  if (!statsData) return;
+  const d = statsData;
+  let status = d.running ? 'Đang cập nhật…' : d.lastRun ? `Cập nhật lúc ${new Date(d.lastRun).toLocaleString('vi-VN')}` : 'Chưa cập nhật lần nào';
+  if (d.lastError) status += ` · lỗi: ${d.lastError}`;
+  $('stats-status').textContent = status;
+  $('stats-refresh').disabled = d.running;
+  $('stats-channels').innerHTML = d.channels.map((c) => {
+    const goal = Math.min(100, Math.round(((c.followers || 0) / 1000) * 100));
+    return `<div class="channel-card">
+      <div class="channel-head"><strong>@${esc(c.handle)}</strong><small>${esc(c.topic || 'Kênh cũ')}</small></div>
+      <div class="channel-metric"><span>${fmtNum(c.followers)}</span><small>follower ${c.followersChange ? `(${fmtSigned(c.followersChange)} 24h)` : ''}</small></div>
+      <div class="goal" title="Tiến độ tới 1.000 follower"><div style="width:${goal}%"></div></div><small class="goal-label">${goal}% tới 1.000 follower</small>
+      <div class="channel-grid">
+        <div><span>${fmtNum(c.views)}</span><small>tổng view (${c.posts} bài)</small></div>
+        <div><span>${fmtNum(c.avgViews)}</span><small>view TB/bài</small></div>
+        <div><span>${fmtNum(c.totalLikes)}</span><small>tổng thích kênh</small></div>
+      </div>
+    </div>`;
+  }).join('') || '<p class="empty-row">Chưa có bài nào được đăng có link. Bài đăng qua autopilot sẽ hiện ở đây.</p>';
+  const filter = $('stats-filter');
+  const current = filter.value;
+  filter.innerHTML = '<option value="">Tất cả kênh</option>' + d.channels.map((c) => `<option value="${esc(c.handle)}">@${esc(c.handle)}${c.topic ? ' · ' + esc(c.topic) : ''}</option>`).join('');
+  filter.value = current;
+  const rows = d.videos.filter((v) => !filter.value || v.handle === filter.value).sort((a, b) => {
+    const x = a[statsSort.key], y = b[statsSort.key];
+    const cmp = typeof x === 'string' || typeof y === 'string' ? String(x ?? '').localeCompare(String(y ?? '')) : (x ?? -1) - (y ?? -1);
+    return statsSort.desc ? -cmp : cmp;
+  });
+  $('stats-count').textContent = `${rows.length} video`;
+  document.querySelectorAll('.stats-table th[data-sort]').forEach((th) => th.classList.toggle('sorted', th.dataset.sort === statsSort.key));
+  $('stats-body').innerHTML = rows.map((v) => `<tr>
+    <td><a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">${esc(v.title || 'Video #' + v.jobId)}</a><small>@${esc(v.handle || '')}${v.topic ? ' · ' + esc(v.topic) : ''} · #${v.jobId}</small></td>
+    <td class="num"><strong>${fmtNum(v.views)}</strong></td>
+    <td class="num ${v.viewsChange > 0 ? 'up' : ''}">${fmtSigned(v.viewsChange)}</td>
+    <td class="num">${fmtNum(v.likes)}</td><td class="num">${fmtNum(v.comments)}</td><td class="num">${fmtNum(v.shares)}</td><td class="num">${fmtNum(v.saves)}</td>
+    <td><small>${v.postedAt ? new Date(v.postedAt + 'Z').toLocaleString('vi-VN') : ''}</small></td>
+  </tr>`).join('') || '<tr><td colspan="8" class="empty-row">Chưa có số liệu.</td></tr>';
+}
+
+document.querySelectorAll('.stats-table th[data-sort]').forEach((th) => th.addEventListener('click', () => {
+  statsSort = { key: th.dataset.sort, desc: statsSort.key === th.dataset.sort ? !statsSort.desc : true };
+  renderStats();
+}));
+$('stats-filter').onchange = renderStats;
+$('stats-refresh').onclick = async () => {
+  try { await api('/api/stats/refresh', 'POST', {}); $('stats-status').textContent = 'Đang cập nhật…'; $('stats-refresh').disabled = true; }
+  catch (error) { alert(error.message); }
+};
+document.querySelector('[data-tab=stats]').addEventListener('click', loadStats);
+setInterval(() => { if ($('tab-stats').classList.contains('active')) loadStats(); }, 15000);
+
+// ---------- KẾ HOẠCH ĐĂNG ----------
+async function renderPlan() {
+  let plan;
+  try { plan = await api('/api/autopilot/plan'); } catch { return; }
+  const box = $('autopilot-plan');
+  if (!plan.scheduled) {
+    box.innerHTML = '<p class="hint">Chưa đặt khung giờ đăng. Đặt trong ⚙ Lịch đăng tự động để máy chuẩn bị video sớm cho từng khung giờ.</p>';
+    return;
+  }
+  const time = (iso) => { const d = new Date(iso); const today = d.getDate() === new Date().getDate(); return `${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}${today ? '' : ' (mai)'}`; };
+  const cell = (slot) => slot.skipped ? '<td class="plan-skip">— đủ bài/ngày</td>'
+    : !slot.job ? '<td class="plan-missing">⚠️ thiếu video</td>'
+    : `<td class="${slot.job.ready ? 'plan-ready' : 'plan-wip'}">${slot.job.ready ? '✅' : '⏳'} #${slot.job.id}<small>${esc(slot.job.step)}</small></td>`;
+  box.innerHTML = `<div class="table-scroll"><table><thead><tr><th>Tài khoản</th>${plan.slots.map((s) => `<th>${time(s)}</th>`).join('')}</tr></thead><tbody>
+    ${plan.channels.map((c) => `<tr><td><strong>${esc(c.account)}</strong><small>${esc(c.name)} · ${c.onHand}/${c.need} video trong tay</small></td>${c.assigned.map(cell).join('')}</tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+// ---------- TƯƠNG TÁC ----------
+let engageData = null;
+let engageFocus = 0;
+const engageResult = (task) => {
+  let r = {}; try { r = JSON.parse(task.result || '{}'); } catch {}
+  if (r.error) return `Lỗi: ${r.error}`;
+  const word = { done: 'xong', already: 'đã có sẵn', skip: '—' };
+  return ['like', 'comment', 'repost'].filter((k) => r[k] && r[k] !== 'skip')
+    .map((k) => `${{ like: 'Tym', comment: 'Bình luận', repost: 'Đăng lại' }[k]}: ${word[r[k]] || r[k]}`).join(' · ');
+};
+
+async function renderEngage(force = false) {
+  if (!force && document.activeElement?.closest?.('#tab-engage textarea, #tab-engage input')) return;
+  try { engageData = await api('/api/engage'); } catch { return; }
+  const e = engageData;
+  $('engage-status').textContent = [e.enabled ? 'Đang bật' : 'Đang tắt', e.finding.length ? `đang tìm video cho ${e.finding.length} acc` : '', e.running.length ? `đang làm ${e.running.map((id) => '#' + id).join(', ')}` : ''].filter(Boolean).join(' · ');
+  $('engage-toggle').textContent = e.enabled ? '⏸ Tạm dừng tự làm' : '▶ Bật tự làm việc đã duyệt';
+  $('engage-toggle').classList.toggle('primary', !e.enabled);
+  $('engage-accounts').innerHTML = e.accounts.map((a) => `<div class="engage-account">
+      <strong>${esc(a.name)}</strong>
+      <small>Mỗi ${e.gapMinutes} phút 1 lượt${a.nextAt ? ` · lượt tới ${new Date(a.nextAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : ''}</small>
+      <small>Giờ qua: ${a.usage.likes}/${e.likesPerHour} tym · ${a.usage.comments}/${e.commentsPerHour} bình luận · ${a.usage.reposts}/${e.repostsPerDay} đăng lại hôm nay</small>
+      ${a.pausedUntil ? `<small class="warn">Tạm dừng tới ${new Date(a.pausedUntil).toLocaleTimeString('vi-VN')} vì TikTok bắt xác minh, hãy mở profile trong Roxy và tự xác minh</small>` : ''}
+      ${a.running ? `<small>▶ Đang làm việc #${a.running}</small>` : ''}
+      <button class="btn big" data-find="${a.topicId}" ${a.finding ? 'disabled' : ''}>${a.finding ? '⏳ Đang tìm…' : '🔍 Tìm video &amp; soạn bình luận'}</button>
+    </div>`).join('');
+  document.querySelectorAll('[data-find]').forEach((b) => { b.onclick = () => engageFind(Number(b.dataset.find)); });
+  if (!document.activeElement?.closest?.('#tab-engage .engage-limits')) {
+    $('engage-likes').value = e.likesPerHour; $('engage-comments').value = e.commentsPerHour; $('engage-reposts').value = e.repostsPerDay;
+    $('engage-start').value = e.startHour; $('engage-end').value = e.endHour; $('engage-gap').value = e.gapMinutes;
+  }
+  const drafts = e.tasks.filter((t) => t.status === 'draft');
+  const queue = e.tasks.filter((t) => t.status !== 'draft');
+  $('engage-draft-count').textContent = `${drafts.length} việc`;
+  engageFocus = Math.min(engageFocus, Math.max(0, drafts.length - 1));
+  $('engage-drafts').innerHTML = drafts.map((t, i) => `<div class="engage-card" tabindex="0" data-id="${t.id}" data-index="${i}">
+      <div class="engage-video"><a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">@${esc(t.author)}</a> <small>${esc(t.topic_name || '')}${t.views ? ' · ' + esc(t.views) + ' view' : ''}</small>
+        <p>${esc(t.description || '(không có mô tả)')}</p>${t.screen_text ? `<small>Chữ trên video: ${esc(t.screen_text)}</small>` : ''}</div>
+      <label class="engage-check"><input type="checkbox" data-like ${t.do_like ? 'checked' : ''}> ❤ Tym</label>
+      <label class="engage-check"><input type="checkbox" data-repost ${t.do_repost ? 'checked' : ''}> 🔁 Đăng lại</label>
+      <textarea data-comment rows="2" maxlength="150" placeholder="Để trống = không bình luận">${esc(t.comment)}</textarea>
+      <div class="actions"><button class="btn big primary" data-approve>✓ Duyệt</button><button class="btn big" data-skip>✗ Bỏ</button></div>
+    </div>`).join('') || '<p class="empty-row">Chưa có việc nào. Bấm "Tìm video &amp; soạn bình luận" ở một kênh.</p>';
+  $('engage-queue-count').textContent = `${queue.length} việc`;
+  $('engage-queue').innerHTML = queue.map((t) => `<div class="engage-row ${t.status}">
+      <span class="engage-badge">${{ approved: '⏳ Chờ chạy', running: '▶ Đang làm', done: '✅ Xong', failed: '⚠️ Lỗi', skipped: '✗ Đã bỏ' }[t.status] || t.status}</span>
+      <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">@${esc(t.author)}</a>
+      <small>${esc(t.topic_name || '')}${t.comment ? ' · “' + esc(t.comment) + '”' : ''}${t.result ? ' · ' + esc(engageResult(t)) : ''}</small>
+    </div>`).join('') || '<p class="empty-row">Chưa có.</p>';
+  document.querySelectorAll('#engage-drafts .engage-card').forEach((card) => {
+    const id = Number(card.dataset.id);
+    card.querySelector('[data-approve]').onclick = () => engageSave(id).then(() => engageSet('/api/engage/approve', [id]));
+    card.querySelector('[data-skip]').onclick = () => engageSet('/api/engage/skip', [id]);
+    card.querySelector('[data-like]').onchange = () => engageSave(id);
+    card.querySelector('[data-repost]').onchange = () => engageSave(id);
+    card.querySelector('[data-comment]').onchange = () => engageSave(id);
+    card.addEventListener('focus', () => { engageFocus = Number(card.dataset.index); });
+  });
+  const focused = document.querySelector(`#engage-drafts .engage-card[data-index="${engageFocus}"]`);
+  if (focused && $('tab-engage').classList.contains('active') && !document.activeElement?.closest?.('#tab-engage')) focused.focus();
+}
+
+async function engageSave(id) {
+  const card = document.querySelector(`.engage-card[data-id="${id}"]`);
+  if (!card) return;
+  try { await api(`/api/engage/tasks/${id}`, 'PATCH', { like: card.querySelector('[data-like]').checked, repost: card.querySelector('[data-repost]').checked, comment: card.querySelector('[data-comment]').value }); }
+  catch (error) { alert(error.message); }
+}
+async function engageSet(path, ids) {
+  if (!ids.length) return;
+  try { await api(path, 'POST', { ids }); } catch (error) { alert(error.message); }
+  await renderEngage(true);
+  document.querySelector(`#engage-drafts .engage-card[data-index="${engageFocus}"]`)?.focus();
+}
+async function engageFind(topicId) {
+  const button = document.querySelector(`[data-find="${topicId}"]`);
+  if (button) { button.disabled = true; button.textContent = '⏳ Đang tìm…'; }
+  try { await api('/api/engage/discover', 'POST', { topicId, query: $('engage-query').value.trim() }); }
+  catch (error) { alert(error.message); }
+  await renderEngage(true);
+}
+$('engage-find-all').onclick = () => Promise.all((engageData?.accounts || []).filter((a) => !a.finding).map((a) => engageFind(a.topicId)));
+const engageDraftIds = () => [...document.querySelectorAll('#engage-drafts .engage-card')].map((c) => Number(c.dataset.id));
+$('engage-approve-all').onclick = async () => {
+  const ids = engageDraftIds();
+  for (const id of ids) await engageSave(id);
+  engageSet('/api/engage/approve', ids);
+};
+$('engage-skip-all').onclick = () => { if (confirm('Bỏ tất cả việc đang chờ duyệt?')) engageSet('/api/engage/skip', engageDraftIds()); };
+$('engage-clear').onclick = async () => { await api('/api/engage/clear', 'POST', {}); renderEngage(true); };
+$('engage-toggle').onclick = async () => { await api('/api/engage', 'PATCH', { enabled: !engageData?.enabled }); renderEngage(true); };
+$('engage-save').onclick = async () => {
+  try {
+    await api('/api/engage', 'PATCH', { likesPerHour: Number($('engage-likes').value), commentsPerHour: Number($('engage-comments').value), repostsPerDay: Number($('engage-reposts').value), startHour: Number($('engage-start').value), endHour: Number($('engage-end').value), gapMinutes: Number($('engage-gap').value) });
+    document.activeElement?.blur(); renderEngage(true);
+  } catch (error) { alert(error.message); }
+};
+// One-key control: the tab works without a mouse.
+document.addEventListener('keydown', (event) => {
+  if (!$('tab-engage').classList.contains('active') || event.ctrlKey || event.altKey || event.metaKey) return;
+  if (event.target.closest?.('textarea, input[type=text], input[type=number]')) { if (event.key === 'Escape') event.target.blur(); return; }
+  const cards = [...document.querySelectorAll('#engage-drafts .engage-card')];
+  const card = cards[engageFocus];
+  const key = event.key.toLowerCase();
+  if (key === 'arrowdown' || key === 'arrowup') {
+    if (!cards.length) return;
+    event.preventDefault();
+    engageFocus = Math.max(0, Math.min(cards.length - 1, engageFocus + (key === 'arrowdown' ? 1 : -1)));
+    cards[engageFocus].focus(); cards[engageFocus].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } else if (key === 'enter' && card && !event.target.closest('button, a')) { event.preventDefault(); card.querySelector('[data-approve]').click(); }
+  else if (key === 'x' && card) card.querySelector('[data-skip]').click();
+  else if (key === 'l' && card) { const box = card.querySelector('[data-like]'); box.checked = !box.checked; box.onchange(); }
+  else if (key === 'r' && card) { const box = card.querySelector('[data-repost]'); box.checked = !box.checked; box.onchange(); }
+  else if (key === 'a') $('engage-approve-all').click();
+});
+document.querySelector('[data-tab=engage]').addEventListener('click', () => renderEngage(true));
+setInterval(() => { if ($('tab-engage').classList.contains('active')) renderEngage(); }, 15000);
+
+// ---------- DỌN DẸP ----------
+const mb = (bytes) => !bytes ? '0 MB' : bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1048576))} MB`;
+let cleanupData = null;
+
+async function renderCleanup() {
+  try { cleanupData = await api('/api/cleanup/items'); } catch { return; }
+  const c = cleanupData;
+  const db = c.database;
+  $('cleanup-status').textContent = c.last ? `Lần dọn gần nhất ${new Date(c.last.at).toLocaleString('vi-VN')}: giải phóng ${mb(c.last.freedBytes)}` : '';
+  const postedBytes = c.posted.reduce((total, p) => total + p.bytes, 0);
+  $('cleanup-totals').innerHTML = [
+    ['Thư mục video', mb(c.mediaBytes), `${mb(postedBytes)} thuộc video đã đăng`],
+    ['Video trong hệ thống', db.jobs, `${c.posted.length} đã đăng · ${c.abandoned.length} lỗi/bỏ dở`],
+    ['Lượt đăng', db.publications, `${db.statRows} dòng thống kê view`],
+    ['Video đề xuất Douyin', db.candidates, `${db.oldCandidates} cũ có thể xóa`]
+  ].map(([label, value, note]) => `<div class="channel-card"><small>${label}</small><div class="channel-metric"><span>${value}</span></div><small>${note}</small></div>`).join('');
+  if (!$('tab-cleanup').querySelector('.fields').contains(document.activeElement)) {
+    $('cleanup-keep').value = c.keepAfterPostDays;
+    $('cleanup-stale').value = c.staleDays;
+    $('cleanup-candidates-days').value = c.candidateDays;
+  }
+  const checked = new Set([...document.querySelectorAll('.cleanup-pick:checked')].map((box) => Number(box.value)));
+  $('cleanup-posted-count').textContent = `${c.posted.length} video`;
+  $('cleanup-posted').innerHTML = c.posted.map((p) => `<tr>
+    <td><input type="checkbox" class="cleanup-pick" value="${p.id}" data-posted="${esc(p.posted_at)}" ${checked.has(p.id) ? 'checked' : ''}></td>
+    <td>${p.post_url ? `<a href="${esc(p.post_url)}" target="_blank" rel="noopener noreferrer">${esc(p.title || 'Video #' + p.id)}</a>` : esc(p.title || 'Video #' + p.id)}<small>#${p.id}</small></td>
+    <td><small>${esc(p.topic || 'Kênh cũ')}${p.handle ? '<br>@' + esc(p.handle) : ''}</small></td>
+    <td><small>${new Date(p.posted_at + 'Z').toLocaleString('vi-VN')}</small></td>
+    <td class="num">${p.views == null ? '—' : Number(p.views).toLocaleString('vi-VN')}</td>
+    <td class="num">${p.bytes ? mb(p.bytes) : `<small>${p.media_cleaned_at ? 'đã dọn' : '—'}</small>`}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="empty-row">Chưa có video đã đăng.</td></tr>';
+  $('cleanup-abandoned-count').textContent = `${c.abandoned.length} video`;
+  $('cleanup-abandoned').innerHTML = c.abandoned.map((a) => `<tr>
+    <td>${esc(a.title || 'Video #' + a.id)}<small>#${a.id}${a.topic ? ' · ' + esc(a.topic) : ''}</small></td>
+    <td><small>${esc(REUP_STATUS[a.status] || a.status)}${a.error ? ' · ' + esc(a.error.slice(0, 80)) : ''}</small></td>
+    <td><small>${new Date(a.created_at + 'Z').toLocaleString('vi-VN')}</small></td>
+    <td class="num">${a.bytes ? mb(a.bytes) : '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="4" class="empty-row">Không có video lỗi hay bỏ dở.</td></tr>';
+}
+
+const pickedIds = () => [...document.querySelectorAll('.cleanup-pick:checked')].map((box) => Number(box.value));
+$('cleanup-all').onchange = () => document.querySelectorAll('.cleanup-pick').forEach((box) => { box.checked = $('cleanup-all').checked; });
+$('cleanup-select-none').onclick = () => { document.querySelectorAll('.cleanup-pick').forEach((box) => { box.checked = false; }); $('cleanup-all').checked = false; };
+$('cleanup-select-old').onclick = () => {
+  const days = Number($('cleanup-older').value) || 0;
+  document.querySelectorAll('.cleanup-pick').forEach((box) => { box.checked = Date.now() - Date.parse(box.dataset.posted + 'Z') >= days * 86400000; });
+};
+async function cleanupAction(path, ids, question) {
+  if (!ids.length) return alert('Chọn ít nhất một video.');
+  if (!confirm(question)) return;
+  try {
+    const result = await api(path, 'POST', { jobIds: ids });
+    alert(`Đã xử lý ${result.jobs} video, giải phóng ${mb(result.freedBytes)}.`);
+    await renderCleanup(); await refresh();
+  } catch (error) { alert(error.message); }
+}
+$('cleanup-media').onclick = () => cleanupAction('/api/cleanup/media', pickedIds(), `Xóa file video của ${pickedIds().length} bài đã chọn? Bài vẫn còn trên TikTok, bản ghi và thống kê được giữ.`);
+$('cleanup-delete').onclick = () => cleanupAction('/api/cleanup/delete', pickedIds(), `XÓA HẲN ${pickedIds().length} video đã chọn: file, bản ghi, lượt đăng và thống kê view. Không hoàn tác được. Tiếp tục?`);
+$('cleanup-delete-abandoned').onclick = () => cleanupAction('/api/cleanup/delete', (cleanupData?.abandoned || []).map((a) => a.id), `XÓA HẲN ${(cleanupData?.abandoned || []).length} video lỗi/bỏ dở? Không hoàn tác được.`);
+$('cleanup-save').onclick = async () => {
+  try {
+    await api('/api/cleanup', 'PATCH', { keepAfterPostDays: Number($('cleanup-keep').value), staleDays: Number($('cleanup-stale').value), candidateDays: Number($('cleanup-candidates-days').value) });
+    document.activeElement?.blur(); renderCleanup();
+  } catch (error) { alert(error.message); }
+};
+$('cleanup-run').onclick = async () => {
+  $('cleanup-run').disabled = true;
+  try { const c = await api('/api/cleanup/run', 'POST', {}); alert(`Đã giải phóng ${mb(c.last.freedBytes)}.`); await renderCleanup(); await refresh(); }
+  catch (error) { alert(error.message); }
+  finally { $('cleanup-run').disabled = false; }
+};
+$('cleanup-candidates').onclick = async () => {
+  try { const r = await api('/api/cleanup/candidates', 'POST', {}); alert(`Đã xóa ${r.candidates} video đề xuất cũ.`); renderCleanup(); }
+  catch (error) { alert(error.message); }
+};
+document.querySelector('[data-tab=cleanup]').addEventListener('click', renderCleanup);
 
 async function setReupTopic(id, topicId) {
   try { await api(`/api/reup/${id}/topic`, 'PATCH', { topicId: topicId || null }); await refresh(); }
@@ -1030,10 +1354,12 @@ async function saveSettings() {
 // ---------- REFRESH ----------
 async function refresh() {
   try {
-    const [dev, vid, lnk, set, sched, tools, reup, discovery, tiktok, products, autopilotState] = await Promise.all([
-      api('/api/devices'), api('/api/videos'), api('/api/links'), api('/api/settings'), api('/api/scheduler'), api('/api/tools/status'), api('/api/reup'), api('/api/douyin/discovery'), api('/api/tiktok/account'), api('/api/shopee-products'), api('/api/autopilot')
+    const [dev, vid, lnk, set, sched, tools, reup, discovery, tiktok, products, autopilotState, accountList] = await Promise.all([
+      api('/api/devices'), api('/api/videos'), api('/api/links'), api('/api/settings'), api('/api/scheduler'), api('/api/tools/status'), api('/api/reup'), api('/api/douyin/discovery'), api('/api/tiktok/account'), api('/api/shopee-products'), api('/api/autopilot'), api('/api/accounts')
     ]);
     state.autopilot = autopilotState;
+    state.accounts = accountList.accounts;
+    $('accounts-low-views').textContent = accountList.lowViews;
     state.products = products.products;
     state.devices = dev.devices;
     state.videos = vid.videos;
@@ -1046,7 +1372,7 @@ async function refresh() {
     state.settings = set.settings;
     state.discovery = discovery;
     state.tiktok = tiktok;
-    renderTikTokAccount(); renderDiscovery(); renderReup(); renderProducts(); renderPreview(); renderAutopilot(); renderFullRun(); renderDevices(); renderVideos(); renderLinks(); renderSettings();
+    renderTikTokAccount(); renderAccounts(); renderDiscovery(); renderReup(); renderProducts(); renderPreview(); renderAutopilot(); renderFullRun(); renderPlan(); if ($('tab-cleanup').classList.contains('active')) renderCleanup(); renderDevices(); renderVideos(); renderLinks(); renderSettings();
     $('btn-scheduler').textContent = (sched.enabled ? 'Tắt' : 'Bật') + ' Scheduler';
     $('btn-scheduler').classList.toggle('on', sched.enabled);
     $('tools-status').textContent = `ffmpeg: ${tools.ffmpeg ? 'OK' : 'MISSING'} | yt-dlp: ${tools.ytdlp ? 'OK' : 'MISSING'}`;

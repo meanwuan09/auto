@@ -389,6 +389,101 @@ test('Douyin import, Vietnamese dubbing, approval and Shopee draft', async (t) =
   assert.equal(reup.isAiContent({ title: '#AI萌宠 小猫' }), true);
   assert.equal(reup.isAiContent({ title: '小猫太淘气了' }), false);
 
+  const stats = require('../server/services/stats');
+  const statPost = Number(db.prepare("INSERT INTO reup_publications (job_id, platform, mode, status, post_url) VALUES (?, 'tiktok', 'schedule', 'done', 'https://www.tiktok.com/@demo.cat/video/7000000000000000001')").run(id).lastInsertRowid);
+  const day = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600000).toISOString();
+  db.prepare('INSERT INTO post_stats (publication_id, checked_at, views, likes, comments, shares, saves) VALUES (?, ?, ?, ?, ?, ?, ?)').run(statPost, day(30), 100, 5, 0, 0, 0);
+  db.prepare('INSERT INTO post_stats (publication_id, checked_at, views, likes, comments, shares, saves) VALUES (?, ?, ?, ?, ?, ?, ?)').run(statPost, day(1), 900, 40, 3, 2, 1);
+  db.prepare('INSERT INTO channel_stats (handle, checked_at, followers, likes, videos) VALUES (?, ?, ?, ?, ?)').run('demo.cat', day(30), 60, 100, 9);
+  db.prepare('INSERT INTO channel_stats (handle, checked_at, followers, likes, videos) VALUES (?, ?, ?, ?, ?)').run('demo.cat', day(1), 85, 150, 10);
+  const summary = stats.summary();
+  const statVideo = summary.videos.find((v) => v.publicationId === statPost);
+  assert.equal(statVideo.views, 900);
+  assert.equal(statVideo.viewsChange, 800, '24h change compares with the reading from a day earlier');
+  const statChannel = summary.channels.find((c) => c.handle === 'demo.cat');
+  assert.equal(statChannel.followers, 85);
+  assert.equal(statChannel.followersChange, 25);
+  assert.equal(statChannel.views, 900);
+
+  // Early preparation follows the schedule: one video per posting slot in the next 24 hours.
+  const at = (h, m = 0) => { const d = new Date(); d.setHours(h, m, 0, 0); return d; };
+  db.exec('DELETE FROM post_stats; DELETE FROM reup_publications'); // earlier steps posted for this topic today
+  autopilot.saveConfig({ slots: '08:00, 12:00, 20:00', postsPerDay: 3 });
+  assert.deepEqual(autopilot.upcomingSlots(at(10)).map((d) => `${d.getHours()}:${d.getDate() === at(10).getDate() ? 'today' : 'tomorrow'}`), ['12:today', '20:today', '8:tomorrow']);
+  assert.equal(autopilot.channelNeed(pets.id, at(10)), 3, 'two slots left today plus tomorrow morning');
+  const petPlan = autopilot.plan(at(10)).channels.find((c) => c.topicId === pets.id);
+  assert.equal(petPlan.assigned.length, 3);
+  autopilot.saveConfig({ slots: '' });
+
+  // Several accounts per topic: each video goes to one account, the least-used account posts first.
+  db.prepare('UPDATE reup_jobs SET auto_prepare = 0').run(); // waiting for posts below must not start real OCR on the mock download
+  const accounts = require('../server/services/accounts');
+  assert.ok(accounts.list().some((a) => a.profile_id === pets.roxy_profile_id && a.status === 'active'), 'topic profiles become accounts');
+  const second = accounts.save({ topicId: pets.id, name: 'Mèo 2', profileId: 'petsTwo', status: 'active' });
+  assert.throws(() => accounts.save({ topicId: pets.id, profileId: 'petsTwo' }), /đã gắn/);
+  assert.throws(() => accounts.save({ dailyLimit: 9 }, second.id), /1 đến 6/);
+  db.exec("DELETE FROM reup_publications; UPDATE reup_jobs SET approved = 0");
+  const dubbed = reup.job(id).dubbed_path;
+  const readyJob = (n) => Number(db.prepare(`INSERT INTO reup_jobs (source_url, rights_confirmed, title, caption, status, approved, topic_id, dubbed_path)
+    VALUES (?, 1, 'Mèo', 'Mèo con #cat', 'review', 1, ?, ?)`).run(`https://www.douyin.com/video/12345678901234569${n}`, pets.id, dubbed).lastInsertRowid);
+  const [firstReady, secondReady] = [readyJob(50), readyJob(51)];
+  const waitPost = async () => { for (let i = 0; i < 40 && db.prepare("SELECT id FROM reup_publications WHERE status = 'running'").get(); i++) await new Promise((resolve) => setTimeout(resolve, 50)); };
+  autopilot.publishNext(noon);
+  await waitPost();
+  assert.equal(publishBody.roxy_profile_id, pets.roxy_profile_id);
+  autopilot.publishNext(noon);
+  await waitPost();
+  assert.equal(publishBody.roxy_profile_id, 'petsTwo', 'the account with no post today takes the next video');
+  assert.deepEqual(db.prepare("SELECT j.id, j.account_profile FROM reup_publications p JOIN reup_jobs j ON j.id = p.job_id ORDER BY p.id").all().map((r) => [r.id, r.account_profile]),
+    [[firstReady, pets.roxy_profile_id], [secondReady, 'petsTwo']], 'each video posts once, to the account recorded on it');
+  autopilot.saveConfig({ slots: '08:00, 12:00, 20:00', postsPerDay: 3 });
+  assert.equal(autopilot.plan(at(10)).channels.filter((c) => c.topicId === pets.id).length, 2, 'the plan shows one row per account');
+  autopilot.saveConfig({ slots: '' });
+
+  db.prepare("UPDATE accounts SET active_since = datetime('now', '-3 days') WHERE id = ?").run(second.id);
+  const lowJob = readyJob(52);
+  db.prepare("UPDATE reup_jobs SET account_profile = 'petsTwo' WHERE id = ?").run(lowJob);
+  for (let i = 0; i < 3; i++) {
+    const pub = Number(db.prepare(`INSERT INTO reup_publications (job_id, platform, mode, status, post_url, created_at)
+      VALUES (?, 'tiktok', 'schedule', 'done', 'https://www.tiktok.com/@two/video/1', datetime('now', '-2 days'))`).run(lowJob).lastInsertRowid);
+    db.prepare('INSERT INTO post_stats (publication_id, checked_at, views) VALUES (?, ?, 5)').run(pub, new Date().toISOString());
+  }
+  assert.deepEqual(accounts.checkHealth().map((a) => a.profile_id), ['petsTwo'], 'an account whose last posts get almost no views is paused');
+  accounts.save({ status: 'active' }, second.id);
+  assert.deepEqual(accounts.checkHealth(), [], 'reactivating judges only posts made after it');
+  const pinned = readyJob(53);
+  db.prepare("UPDATE reup_jobs SET account_profile = 'petsTwo' WHERE id = ?").run(pinned);
+  accounts.remove(second.id);
+  assert.equal(reup.job(pinned).account_profile, '', 'videos waiting for a removed account return to the topic queue');
+
+  const cleanup = require('../server/services/cleanup');
+  const mediaDir = process.env.REUP_MEDIA_DIR;
+  const oldJob = Number(db.prepare("INSERT INTO reup_jobs (source_url, rights_confirmed, title, status, approved, dubbed_path) VALUES ('https://www.douyin.com/video/1234567890123456901', 1, 'old', 'review', 1, 'x')").run().lastInsertRowid);
+  const newJob = Number(db.prepare("INSERT INTO reup_jobs (source_url, rights_confirmed, title, status, approved, dubbed_path) VALUES ('https://www.douyin.com/video/1234567890123456902', 1, 'new', 'review', 1, 'x')").run().lastInsertRowid);
+  for (const [job, name] of [[oldJob, 'source.mp4'], [oldJob, 'vi.mp4'], [oldJob, 'reviewed-vi.json'], [newJob, 'vi.mp4'], [newJob, 'vi-background-vocals.wav']]) {
+    fs.writeFileSync(path.join(mediaDir, `${job}-${name}`), 'x'.repeat(1000));
+  }
+  db.prepare("INSERT INTO reup_publications (job_id, platform, mode, status, created_at) VALUES (?, 'tiktok', 'schedule', 'done', datetime('now', '-5 days'))").run(oldJob);
+  db.prepare("INSERT INTO reup_publications (job_id, platform, mode, status, created_at) VALUES (?, 'tiktok', 'schedule', 'done', datetime('now', '-1 hours'))").run(newJob);
+  const cleaned = cleanup.run();
+  assert.ok(cleaned.last.jobs.includes(oldJob), 'a video posted 5 days ago is cleaned');
+  assert.equal(fs.existsSync(path.join(mediaDir, `${oldJob}-vi.mp4`)), false);
+  assert.equal(fs.existsSync(path.join(mediaDir, `${oldJob}-reviewed-vi.json`)), true, 'translations are kept');
+  assert.equal(fs.existsSync(path.join(mediaDir, `${newJob}-vi.mp4`)), true, 'a video posted an hour ago is kept');
+  assert.equal(fs.existsSync(path.join(mediaDir, `${newJob}-vi-background-vocals.wav`)), false, 'separation intermediates go right away');
+  assert.throws(() => cleanup.saveConfig({ keepAfterPostDays: 0 }), /1 đến 90/);
+  assert.ok(cleanup.items().posted.some((p) => p.id === newJob));
+  fs.writeFileSync(path.join(mediaDir, `${newJob}-reviewed-vi.json`), '{}');
+  assert.equal(cleanup.removeMedia([newJob]).jobs, 1);
+  assert.equal(fs.existsSync(path.join(mediaDir, `${newJob}-vi.mp4`)), false, 'Xóa file removes the video');
+  assert.ok(reup.job(newJob), 'Xóa file keeps the record');
+  cleanup.removeRecords([newJob]);
+  assert.equal(reup.job(newJob), undefined, 'Xóa hẳn removes the record');
+  assert.equal(fs.existsSync(path.join(mediaDir, `${newJob}-reviewed-vi.json`)), false);
+  assert.equal(db.prepare('SELECT count(*) n FROM reup_publications WHERE job_id = ?').get(newJob).n, 0);
+  const busyJob = Number(db.prepare("INSERT INTO reup_jobs (source_url, rights_confirmed, status) VALUES ('https://www.douyin.com/video/1234567890123456903', 1, 'dubbing')").run().lastInsertRowid);
+  assert.throws(() => cleanup.removeRecords([busyJob]), /đang xử lý/);
+
   // The mock download is not a real video; stop it from starting real OCR before the test ends.
   db.prepare('UPDATE reup_jobs SET auto_prepare = 0').run();
   await reup.drainDownloads();

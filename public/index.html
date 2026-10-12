@@ -20,10 +20,13 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="auto">Luồng tự động</button>
+    <button class="tab" data-tab="engage">Tương tác</button>
     <button class="tab" data-tab="sources">Nguồn Douyin</button>
     <button class="tab" data-tab="products">Sản phẩm Shopee</button>
     <button class="tab" data-tab="reup">Video &amp; đăng</button>
     <button class="tab" data-tab="preview">Xem trước</button>
+    <button class="tab" data-tab="stats">Thống kê</button>
+    <button class="tab" data-tab="cleanup">Dọn dẹp</button>
     <button class="tab" data-tab="topics">Chủ đề &amp; kênh</button>
     <button class="tab" data-tab="settings">Cài đặt</button>
     <button class="tab" data-tab="logs">Log</button>
@@ -61,6 +64,8 @@
           <button class="btn" id="autopilot-settings">⚙ Lịch đăng tự động</button>
           <button class="btn" id="autopilot-run">Chạy ngay</button>
         </div>
+        <h3 class="box-sub">Kế hoạch đăng 24 giờ tới</h3>
+        <div id="autopilot-plan" class="plan-table"></div>
         <h3 class="box-sub">Hoạt động gần đây</h3>
         <ul id="autopilot-log" class="autopilot-log"></ul>
       </div>
@@ -161,12 +166,134 @@
       </div>
     </section>
 
+    <!-- THỐNG KÊ -->
+    <section id="tab-stats" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Kênh TikTok</h2><span id="stats-status" role="status"></span></div>
+        <div class="actions stats-actions"><button class="btn primary" id="stats-refresh">Cập nhật ngay</button><small class="hint">Tự cập nhật mỗi giờ · đọc bằng profile Roxy của từng kênh</small></div>
+        <div id="stats-channels" class="channel-cards"></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Video đã đăng</h2><span id="stats-count"></span></div>
+        <div class="fields"><label>Kênh<select id="stats-filter"><option value="">Tất cả kênh</option></select></label></div>
+        <div class="table-scroll"><table class="stats-table">
+          <thead><tr>
+            <th data-sort="title">Video</th><th data-sort="views" class="num">View</th><th data-sort="viewsChange" class="num">+24h</th>
+            <th data-sort="likes" class="num">Thích</th><th data-sort="comments" class="num">Bình luận</th><th data-sort="shares" class="num">Chia sẻ</th>
+            <th data-sort="saves" class="num">Lưu</th><th data-sort="postedAt">Ngày đăng</th>
+          </tr></thead>
+          <tbody id="stats-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- TƯƠNG TÁC -->
+    <section id="tab-engage" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Tương tác: tym, bình luận, đăng lại</h2><span id="engage-status"></span></div>
+        <p class="hint">Hệ thống tìm video cùng ngách bằng chính acc của kênh và soạn sẵn bình luận. Bạn chỉ cần duyệt; các việc đã duyệt được làm lần lượt; 3 acc chạy song song, mỗi acc một lượt theo nhịp và giới hạn bên dưới.</p>
+        <div id="engage-accounts" class="engage-accounts"></div>
+        <div class="fields">
+          <label>Từ khóa (để trống = dùng hashtag của kênh)<input id="engage-query" type="text" placeholder="vd: decorphongtro"></label>
+        </div>
+        <div class="actions engage-big">
+          <button class="btn big primary" id="engage-find-all">🔍 Tìm cho cả 3 acc cùng lúc</button>
+          <button class="btn big" id="engage-toggle"></button>
+          <button class="btn big" id="engage-clear">🧹 Xóa việc đã xong</button>
+        </div>
+        <details class="engage-limits"><summary>Giới hạn an toàn cho mỗi acc</summary>
+          <div class="fields">
+            <label>Tym mỗi giờ<input id="engage-likes" type="number" min="0" max="30"></label>
+            <label>Mỗi acc làm 1 lượt mỗi (phút)<input id="engage-gap" type="number" min="2" max="60"></label>
+            <label>Bình luận mỗi giờ<input id="engage-comments" type="number" min="0" max="20"></label>
+            <label>Đăng lại mỗi ngày<input id="engage-reposts" type="number" min="0" max="10"></label>
+            <label>Chạy từ (giờ)<input id="engage-start" type="number" min="0" max="23"></label>
+            <label>Đến (giờ)<input id="engage-end" type="number" min="1" max="24"></label>
+          </div>
+          <div class="actions"><button class="btn" id="engage-save">Lưu giới hạn</button></div>
+        </details>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Chờ bạn duyệt</h2><span id="engage-draft-count"></span></div>
+        <div class="actions engage-big">
+          <button class="btn big primary" id="engage-approve-all">✓ Duyệt tất cả</button>
+          <button class="btn big" id="engage-skip-all">✗ Bỏ tất cả</button>
+        </div>
+        <p class="hint">Phím tắt: <kbd>↑</kbd><kbd>↓</kbd> chọn thẻ · <kbd>Enter</kbd> duyệt · <kbd>X</kbd> bỏ · <kbd>L</kbd> bật/tắt tym · <kbd>R</kbd> bật/tắt đăng lại · <kbd>A</kbd> duyệt tất cả.</p>
+        <div id="engage-drafts" class="engage-list"></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Đang chờ chạy &amp; đã làm</h2><span id="engage-queue-count"></span></div>
+        <div id="engage-queue" class="engage-list"></div>
+      </div>
+    </section>
+
+    <!-- DỌN DẸP -->
+    <section id="tab-cleanup" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Dung lượng &amp; dữ liệu</h2><span id="cleanup-status"></span></div>
+        <div id="cleanup-totals" class="channel-cards"></div>
+        <h3 class="box-sub">Dọn tự động (mỗi 6 giờ)</h3>
+        <div class="fields">
+          <label>Xóa file video sau khi đăng (ngày)<input id="cleanup-keep" type="number" min="1" max="90"></label>
+          <label>Xóa video lỗi / bỏ dở (ngày)<input id="cleanup-stale" type="number" min="1" max="90"></label>
+          <label>Xóa video đề xuất Douyin cũ (ngày)<input id="cleanup-candidates-days" type="number" min="1" max="90"></label>
+        </div>
+        <div class="actions">
+          <button class="btn" id="cleanup-save">Lưu</button>
+          <button class="btn primary" id="cleanup-run">Dọn tự động ngay</button>
+          <button class="btn" id="cleanup-candidates">Xóa đề xuất Douyin cũ</button>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Video đã đăng</h2><span id="cleanup-posted-count"></span></div>
+        <div class="fields">
+          <label class="narrow">Chọn bài đăng quá (ngày)<input id="cleanup-older" type="number" min="0" max="365" value="3"></label>
+        </div>
+        <div class="actions">
+          <button class="btn" id="cleanup-select-old">Chọn theo số ngày</button>
+          <button class="btn" id="cleanup-select-none">Bỏ chọn</button>
+          <button class="btn" id="cleanup-media">🧹 Xóa file đã chọn</button>
+          <button class="btn danger" id="cleanup-delete">🗑 Xóa hẳn đã chọn</button>
+        </div>
+        <p class="hint"><strong>Xóa file</strong>: xóa video trên máy (video vẫn nằm trên TikTok), giữ bản ghi và thống kê view. <strong>Xóa hẳn</strong>: xóa cả bản ghi, lượt đăng và thống kê khỏi database.</p>
+        <div class="table-scroll"><table class="cleanup-table">
+          <thead><tr><th><input type="checkbox" id="cleanup-all" aria-label="Chọn tất cả"></th><th>Video</th><th>Kênh</th><th>Ngày đăng</th><th class="num">View</th><th class="num">File trên máy</th></tr></thead>
+          <tbody id="cleanup-posted"></tbody>
+        </table></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Video lỗi / bỏ dở</h2><span id="cleanup-abandoned-count"></span></div>
+        <div class="actions"><button class="btn danger" id="cleanup-delete-abandoned">🗑 Xóa hẳn tất cả</button></div>
+        <div class="table-scroll"><table class="cleanup-table">
+          <thead><tr><th>Video</th><th>Trạng thái</th><th>Ngày tạo</th><th class="num">File trên máy</th></tr></thead>
+          <tbody id="cleanup-abandoned"></tbody>
+        </table></div>
+      </div>
+    </section>
+
     <!-- CHỦ ĐỀ & KÊNH -->
     <section id="tab-topics" class="panel">
       <div class="box">
         <div class="box-head"><h2>Chủ đề &amp; kênh đăng</h2></div>
-        <p class="hint">Mỗi chủ đề đăng bằng một profile Roxy (kênh TikTok). Từ khóa Douyin dùng để lọc video quét về; từ khóa Shopee dùng để quét sản phẩm.</p>
+        <p class="hint">Mỗi chủ đề đăng bằng các tài khoản bên dưới. Từ khóa Douyin dùng để lọc video quét về; từ khóa Shopee dùng để quét sản phẩm.</p>
         <div id="topic-list" class="topic-list"></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Tài khoản đăng bài</h2><span id="accounts-status" role="status"></span></div>
+        <p class="hint">Mỗi tài khoản TikTok là một profile Roxy (proxy riêng). Video của chủ đề được chia lần lượt cho các tài khoản <b>Đang đăng</b>; mỗi video chỉ lên một tài khoản. <b>Đang nuôi</b> = chưa đăng bài. Tài khoản tự <b>Tạm dừng</b> khi 3 bài gần nhất đều dưới <span id="accounts-low-views">30</span> view sau 24 giờ.</p>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Tên</th><th>Chủ đề</th><th>Profile Roxy</th><th>Trạng thái</th><th>Bài/ngày</th><th>Hôm nay</th><th></th></tr></thead>
+          <tbody id="accounts-body"></tbody>
+        </table></div>
+        <div class="fields account-add">
+          <label>Tên<input id="account-new-name" maxlength="80" placeholder="vd. Mèo hài 2"></label>
+          <label>Chủ đề<select id="account-new-topic"></select></label>
+          <label>Profile Roxy<input id="account-new-profile" maxlength="64" list="account-profile-options" placeholder="ID profile"></label>
+          <datalist id="account-profile-options"></datalist>
+          <label>Trạng thái<select id="account-new-status"><option value="warming">Đang nuôi</option><option value="active">Đang đăng</option></select></label>
+        </div>
+        <div class="actions"><button class="btn primary" id="account-add">Thêm tài khoản</button></div>
       </div>
       <div class="box">
         <div class="box-head"><h2>Tài khoản TikTok trong LUNO</h2><span id="tiktok-account-status" role="status"></span></div>

@@ -258,3 +258,60 @@ input, textarea, select {
 .login-pill.warn { background: #3a2f12; color: #e0b65c; border-color: #6b5420; }
 .hint.steps { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .hint code { background: #1b212c; padding: 1px 5px; border-radius: 4px; }
+
+/* ---------- Thống kê ---------- */
+.stats-actions { margin: 0 0 14px; }
+.stats-actions .hint { margin: 0; }
+.channel-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.channel-card { border: 1px solid #252c3a; border-radius: 10px; padding: 14px; background: #0f141d; display: flex; flex-direction: column; gap: 6px; }
+.channel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.channel-card small { color: #8b93a7; font-size: 11px; }
+.channel-metric span { font-size: 26px; font-weight: 700; color: #e3e7ef; margin-right: 6px; }
+.goal { height: 6px; border-radius: 3px; background: #1b212c; overflow: hidden; }
+.goal div { height: 100%; background: linear-gradient(90deg, #3b6fe0, #74dfaa); }
+.channel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.channel-grid span { display: block; font-size: 15px; font-weight: 600; color: #d9dce4; }
+.stats-table th[data-sort] { cursor: pointer; user-select: none; }
+.stats-table th.sorted { color: #8fb4ff; }
+.stats-table .num { text-align: right; white-space: nowrap; }
+.stats-table td.up { color: #74dfaa; }
+.stats-table td small { display: block; color: #8b93a7; margin-top: 3px; }
+.stats-table td a { color: #74dfaa; }
+
+.plan-table td small { display: block; color: #8b93a7; font-size: 11px; margin-top: 2px; }
+.plan-table td.plan-ready { color: #74dfaa; }
+.plan-table td.plan-wip { color: #8fb4ff; }
+.plan-table td.plan-missing { color: #e0b65c; }
+.plan-table td.plan-skip { color: #5b6475; }
+
+.cleanup-table td small { display: block; color: #8b93a7; margin-top: 2px; }
+.cleanup-table td a { color: #74dfaa; }
+.cleanup-table .num { text-align: right; white-space: nowrap; }
+.cleanup-table th:first-child, .cleanup-table td:first-child { width: 32px; }
+#accounts-body input, #accounts-body select { width: 100%; min-width: 90px; }
+#accounts-body .account-limit { width: 64px; min-width: 0; }
+#accounts-body small { display: block; color: #aeb7c6; margin-top: 4px; }
+.account-add { margin-top: 10px; }
+
+/* Tương tác: large targets and a clear focus ring for one-switch / head-mouse use. */
+.btn.big { font-size: 16px; padding: 12px 20px; min-height: 48px; }
+.engage-accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
+.engage-account { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid #2a3142; border-radius: 10px; }
+.engage-account small { color: #8b93a7; }
+.engage-account .warn { color: #f5b14c; }
+.engage-list { display: flex; flex-direction: column; gap: 10px; }
+.engage-card { display: grid; grid-template-columns: auto auto 1fr; gap: 8px 16px; align-items: center; padding: 12px; border: 2px solid #2a3142; border-radius: 10px; outline: none; }
+.engage-card:focus, .engage-card:focus-within { border-color: #4f8cff; box-shadow: 0 0 0 3px rgba(79, 140, 255, .35); }
+.engage-card .engage-video { grid-column: 1 / -1; }
+.engage-card .engage-video p { margin: 4px 0 0; font-size: 15px; }
+.engage-card textarea { grid-column: 1 / -1; font-size: 16px; padding: 8px; border-radius: 8px; background: #11151f; color: inherit; border: 1px solid #2a3142; }
+.engage-card .actions { grid-column: 1 / -1; }
+.engage-check { font-size: 16px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.engage-check input { width: 22px; height: 22px; }
+.engage-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #1f2533; }
+.engage-row small { color: #8b93a7; }
+.engage-row.failed .engage-badge { color: #f5b14c; }
+.engage-big { gap: 10px; }
+kbd { border: 1px solid #3a4256; border-radius: 4px; padding: 0 5px; font-size: 12px; margin: 0 2px; }
+@media (max-width: 640px) { .engage-card { grid-template-columns: 1fr; } }
+.engage-video a, .engage-row a { color: #74dfaa; font-weight: 600; }
