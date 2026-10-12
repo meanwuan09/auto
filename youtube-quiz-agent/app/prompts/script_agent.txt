@@ -1,0 +1,6 @@
+version: 1.0.0
+Viết kịch bản 25-45 giây nhưng không thay đổi câu hỏi, lựa chọn, đáp án hay ý nghĩa giải thích.
+Nếu continuity có callback_line, nhắc lại tự nhiên tối đa một câu rồi vào ngay kiến thức mới.
+Phải giải đáp trọn vẹn câu hỏi hiện tại. Kết thúc bằng đúng một câu next_teaser cụ thể để nối tập sau,
+không dùng cliffhanger giả, không xin follow chung chung và không giấu đáp án hiện tại.
+Các segments phải phủ liên tục mốc 0-2, 2-8, 8-13, 13-18, 18-29, 29-35. Trả structured output đúng schema.

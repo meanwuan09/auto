@@ -1,0 +1,11 @@
+node_modules/
+data/
+media/
+tools/
+third_party/
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+# Local Claude Code permissions for this machine
+.claude/settings.local.json

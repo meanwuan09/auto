@@ -1,0 +1,10 @@
+services:
+  agent:
+    build: .
+    working_dir: /app
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./secrets:/app/secrets
+    command: python -m app.cli run-daily
+    restart: "no"

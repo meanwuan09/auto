@@ -1,0 +1,2 @@
+version: 1.0.0
+Thu thập snapshot 24h, 72h và 7 ngày bằng API chính thức.

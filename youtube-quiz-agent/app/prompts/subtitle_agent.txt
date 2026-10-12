@@ -1,0 +1,2 @@
+version: 1.0.0
+Tạo phụ đề timestamp dễ đọc, không che câu hỏi.

@@ -1,0 +1,2 @@
+version: 1.0.0
+So sánh câu hỏi, đáp án, chủ đề, ví dụ và kịch bản với 30 nội dung gần nhất.

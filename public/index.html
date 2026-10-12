@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video tiếng Việt - TikTok & Shopee</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Video tiếng Việt <span>Douyin → TikTok · Shopee Video</span></h1>
+    <div class="header-actions">
+      <button id="btn-rescan" class="btn" hidden>Quét thiết bị</button>
+      <button id="btn-ytdlp" class="btn">Cài yt-dlp</button>
+      <button id="btn-ffmpeg" class="btn">Cài ffmpeg</button>
+      <button id="btn-scheduler" class="btn toggle" hidden>Bật Scheduler</button>
+      <span id="tools-status" class="status-line"></span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="auto">Luồng tự động</button>
+    <button class="tab" data-tab="sources">Nguồn Douyin</button>
+    <button class="tab" data-tab="products">Sản phẩm Shopee</button>
+    <button class="tab" data-tab="reup">Video &amp; đăng</button>
+    <button class="tab" data-tab="preview">Xem trước</button>
+    <button class="tab" data-tab="topics">Chủ đề &amp; kênh</button>
+    <button class="tab" data-tab="settings">Cài đặt</button>
+    <button class="tab" data-tab="logs">Log</button>
+    <!-- Emulator-era tabs, unused since posting moved to Roxy browser profiles. -->
+    <button class="tab" data-tab="devices" hidden>Thiết bị</button>
+    <button class="tab" data-tab="videos" hidden>Video</button>
+    <button class="tab" data-tab="links" hidden>Link affiliate</button>
+  </nav>
+
+  <div id="activity-bar" class="activity-bar idle" role="status" aria-live="polite">
+    <span class="activity-dot"></span><span id="activity-text">Đang rảnh</span>
+    <div id="activity-list" class="activity-list"></div>
+  </div>
+
+  <main>
+    <!-- LUỒNG TỰ ĐỘNG -->
+    <section id="tab-auto" class="panel active">
+      <div class="box box-accent">
+        <div class="box-head"><h2>Luồng tự động</h2><span id="full-run-status" role="status"></span></div>
+        <div class="fields">
+          <label>Kênh đăng<select id="full-run-account"></select></label>
+          <label>Loại content<select id="full-run-topic"></select></label>
+          <label class="narrow">Số video<input id="full-run-count" type="number" min="1" max="10" value="2"></label>
+        </div>
+        <div class="actions">
+          <button class="btn" id="full-run-prepare" title="Quét, tải, lấy lời thoại, dịch, lồng tiếng, gắn sản phẩm và link — dừng lại để bạn duyệt">⚙ Chuẩn bị tới bước đăng</button>
+          <button class="btn primary" id="full-run-start" title="Như trên, rồi tự duyệt nếu qua kiểm tra và đăng theo lịch">▶ Chạy và tự đăng</button>
+        </div>
+        <p class="hint">Dịch bằng <span id="full-run-translator">DeepSeek</span> · video không qua kiểm tra sẽ dừng chờ bạn · xem lại ở tab <strong>Xem trước</strong> trước giờ đăng.</p>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Tự động đăng &amp; bình luận link</h2></div>
+        <p id="autopilot-status" class="box-status" role="status"></p>
+        <div class="actions">
+          <button class="btn" id="autopilot-settings">⚙ Lịch đăng tự động</button>
+          <button class="btn" id="autopilot-run">Chạy ngay</button>
+        </div>
+        <h3 class="box-sub">Hoạt động gần đây</h3>
+        <ul id="autopilot-log" class="autopilot-log"></ul>
+      </div>
+    </section>
+
+    <!-- NGUỒN DOUYIN -->
+    <section id="tab-sources" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Quét video Douyin</h2><span id="discovery-status" role="status"></span></div>
+        <div class="actions">
+          <button class="btn primary" id="discovery-scan">Quét ngay</button>
+          <button class="btn" id="discovery-cookie">🍪 Đăng nhập bằng cookie</button>
+          <button class="btn" id="discovery-login">Đăng nhập bằng QR</button>
+          <span id="douyin-login-status" class="login-pill"></span>
+        </div>
+        <div class="checks">
+          <label class="check-line"><input id="discovery-enabled" type="checkbox"> Quét mỗi giờ</label>
+          <label class="check-line"><input id="discovery-public-only" type="checkbox" checked> Chỉ nguồn công khai (không cần tài khoản)</label>
+          <label class="check-line"><input id="discovery-auto-queue" type="checkbox"> Tự tải từ kênh đã xác nhận quyền</label>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Nguồn quét</h2></div>
+        <form id="discovery-source-form">
+          <div class="fields">
+            <label class="narrow">Loại nguồn<select id="discovery-source-kind"><option value="keyword">Từ khóa</option><option value="channel">Kênh Douyin</option><option value="feed">Bảng video công khai</option><option value="category">Danh mục công khai</option></select></label>
+            <label class="wide">Giá trị<input id="discovery-source-value" maxlength="250" required placeholder="Từ khóa tiếng Trung, URL kênh hoặc mã danh mục (300201)"></label>
+            <label>Chủ đề<select id="discovery-source-topic" class="topic-select"></select></label>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">Thêm nguồn</button>
+            <label class="check-line"><input id="discovery-source-rights" type="checkbox" disabled> Tôi có quyền sử dụng video của kênh này</label>
+          </div>
+        </form>
+        <div id="discovery-sources" class="source-list"></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Video đề xuất</h2></div>
+        <div class="fields">
+          <label>Lọc theo chủ đề<select id="discovery-topic-filter"></select></label>
+        </div>
+        <div class="actions"><button class="btn primary" id="discovery-quick" title="Tải, lấy lời thoại và gắn sản phẩm cho 3 video điểm cao nhất của chủ đề">⚡ Lấy nhanh 3 video tốt nhất</button></div>
+        <div class="table-scroll"><table><thead><tr><th>Video đề xuất</th><th>Tương tác</th><th>Điểm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="discovery-candidates"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- SẢN PHẨM SHOPEE -->
+    <section id="tab-products" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Sản phẩm Shopee theo chủ đề</h2><span id="products-status" role="status"></span></div>
+        <p class="hint">Quét bằng tiện ích <strong>Shopee Custom Link</strong> trong Chrome đã đăng nhập Shopee Affiliate (nút <strong>Quét sản phẩm theo chủ đề</strong>). Bật <strong>Tự tạo link</strong> trong tiện ích để link affiliate được tạo tự động sau khi gắn sản phẩm.</p>
+        <div class="fields"><label>Lọc theo chủ đề<select id="products-topic"></select></label></div>
+        <div class="table-scroll"><table><thead><tr><th>Sản phẩm</th><th>Giá · Đã bán</th><th>Hoa hồng</th><th>Gắn vào video</th></tr></thead><tbody id="products-body"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- VIDEO & ĐĂNG -->
+    <section id="tab-reup" class="panel">
+      <div class="box-grid">
+        <div class="box">
+          <div class="box-head"><h2>Nhập link Douyin</h2></div>
+          <form id="reup-import-form">
+            <div class="fields">
+              <label class="full">Link video (mỗi dòng một link)<textarea id="reup-url" rows="3" required placeholder="https://www.douyin.com/video/..."></textarea></label>
+              <label>Tên nội bộ<input id="reup-title" placeholder="Tùy chọn"></label>
+              <label>Chủ đề<select id="reup-topic" class="topic-select"></select></label>
+            </div>
+            <div class="actions">
+              <button class="btn primary" type="submit">Tải video</button>
+              <label class="check-line"><input id="reup-rights" type="checkbox" required> Tôi có quyền sử dụng và đăng lại video này</label>
+            </div>
+            <p id="reup-import-result" role="status"></p>
+          </form>
+        </div>
+        <div class="box">
+          <div class="box-head"><h2>Dịch vụ</h2></div>
+          <div id="reup-services"></div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Video trong quy trình</h2><span id="reup-count"></span></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Video</th><th>Trạng thái</th><th>Sản phẩm</th><th>Đăng bài</th><th>Thao tác</th></tr></thead>
+          <tbody id="reup-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- XEM TRƯỚC -->
+    <section id="tab-preview" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Video đã xử lý</h2><span id="preview-count" role="status"></span></div>
+        <div class="fields">
+          <label class="narrow">Trạng thái<select id="preview-status"><option value="">Tất cả</option><option value="pending">Chờ duyệt</option><option value="approved">Đã duyệt</option></select></label>
+          <label>Chủ đề<select id="preview-topic"></select></label>
+        </div>
+        <div id="preview-grid" class="preview-gallery"></div>
+      </div>
+    </section>
+
+    <!-- CHỦ ĐỀ & KÊNH -->
+    <section id="tab-topics" class="panel">
+      <div class="box">
+        <div class="box-head"><h2>Chủ đề &amp; kênh đăng</h2></div>
+        <p class="hint">Mỗi chủ đề đăng bằng một profile Roxy (kênh TikTok). Từ khóa Douyin dùng để lọc video quét về; từ khóa Shopee dùng để quét sản phẩm.</p>
+        <div id="topic-list" class="topic-list"></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Tài khoản TikTok trong LUNO</h2><span id="tiktok-account-status" role="status"></span></div>
+        <div class="fields">
+          <label>Tài khoản<select id="tiktok-account-select"></select></label>
+        </div>
+        <div class="actions"><button class="btn" id="tiktok-login">Đăng nhập TikTok</button></div>
+      </div>
+    </section>
+
+    <section id="tab-devices" class="panel">
+      <table>
+        <thead>
+          <tr><th>Serial</th><th>Tên</th><th>Trạng thái</th><th>Độ phân giải</th><th>Đăng lần cuối</th><th>Thao tác</th></tr>
+        </thead>
+        <tbody id="devices-body"></tbody>
+      </table>
+      <p class="hint">Hướng dẫn: mở LDPlayer/MuMu &gt; chạy nhiều instance &gt; cài TikTok trong từng instance &gt; bấm "Quét thiết bị". Bấm "Ảnh màn hình" để hiệu chỉnh tọa độ nút bấm cho từng máy.</p>
+    </section>
+
+    <!-- VIDEOS -->
+    <section id="tab-videos" class="panel">
+      <div class="card">
+        <h3>Thêm video từ URL</h3>
+        <div class="row">
+          <input id="video-url" placeholder="URL video TikTok / YouTube / bất kỳ (yt-dlp)">
+          <input id="video-title" placeholder="Tiêu đề (tùy chọn)">
+          <button id="btn-download" class="btn primary">Tải + xử lý</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Tiêu đề</th><th>Trạng thái</th><th>Kích thước</th><th>Thao tác</th></tr>
+        </thead>
+        <tbody id="videos-body"></tbody>
+      </table>
+    </section>
+
+    <!-- LINKS -->
+    <section id="tab-links" class="panel">
+      <div class="card">
+        <h3>Pool link affiliate (mỗi link dán 1 lần, dùng luân phiên)</h3>
+        <textarea id="links-textarea" rows="6" placeholder="https://shopee.vn/...&#10;https://shopee.vn/..."></textarea>
+        <button id="btn-add-links" class="btn primary">Thêm link</button>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>Nội dung</th><th>Đã dùng</th><th></th></tr></thead>
+        <tbody id="links-body"></tbody>
+      </table>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="panel">
+      <div class="card">
+        <h3>Thiết lập</h3>
+        <div id="settings-form"></div>
+        <button id="btn-save-settings" class="btn primary">Lưu cài đặt</button>
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section id="tab-logs" class="panel">
+      <div id="log-box"></div>
+    </section>
+  </main>
+
+  <!-- DEVICE DETAIL MODAL -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button class="btn" onclick="closeModal()">Đóng</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

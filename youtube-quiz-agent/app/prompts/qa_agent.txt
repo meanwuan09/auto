@@ -1,0 +1,2 @@
+version: 1.0.0
+Kiểm tra kỹ thuật, trình tự reveal đáp án, safe margin và tính khớp kịch bản. Không bỏ qua lỗi. Trả JSON đúng schema.

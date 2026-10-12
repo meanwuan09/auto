@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shopee Custom Link</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Shopee Custom Link</h1>
+  <section class="auto-box">
+    <button id="scan-products" class="primary">Quét sản phẩm theo chủ đề</button>
+    <button id="link-products">Tạo link cho video đã gắn sản phẩm</button>
+    <label class="auto-line"><input id="auto-link" type="checkbox"> Tự tạo link (mỗi 2 phút, chạy nền)</label>
+    <button id="scan-douyin">Quét video Douyin theo từ khóa</button>
+    <label class="auto-line"><input id="auto-douyin" type="checkbox"> Tự quét Douyin (mỗi giờ, cần đăng nhập douyin.com)</label>
+    <p id="task-status" role="status"></p>
+  </section>
+  <label for="job">Clip</label>
+  <select id="job"></select>
+  <div id="details"></div>
+  <button id="auto" class="primary">Tạo link và lưu vào clip</button>
+  <div class="actions">
+    <button id="open">Mở trang Shopee</button>
+    <button id="fill">Điền URL và Sub_id</button>
+  </div>
+  <button id="read">Đọc link vừa tạo</button>
+  <label for="affiliate">Link Shopee trả về</label>
+  <input id="affiliate" type="url" placeholder="https://s.shopee.vn/...">
+  <button id="save" class="primary">Lưu vào clip</button>
+  <p id="message" role="status"></p>
+  <script src="shopee-page.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

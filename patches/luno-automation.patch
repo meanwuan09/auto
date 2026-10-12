@@ -1,0 +1,366 @@
+diff --git a/backend/batch_engine.py b/backend/batch_engine.py
+index 74c85e0..39ccd98 100644
+--- a/backend/batch_engine.py
++++ b/backend/batch_engine.py
+@@ -38,6 +38,7 @@ class VideoJob:
+     music_pick_range: tuple[int, int] = (1, 8)
+     music_volume_db: int = -20
+     mode: str = 'schedule'  # 'schedule' | 'draft'
++    ai_generated: bool = False
+ 
+ 
+ def _noop(_event: dict):
+@@ -58,6 +59,9 @@ def run_batch(
+     with sync_playwright() as p:
+         browser, context = tk.ensure_login(p)
+         page = context.new_page()
++        # Cửa sổ profile RoxyBrowser có thể hẹp hơn các modal của TikTok Studio (ảnh bìa,
++        # kiểm tra nội dung) khiến nút bấm nằm ngoài màn hình; ép khung nhìn đủ rộng.
++        page.set_viewport_size({'width': 1440, 'height': 900})
+ 
+         page.goto(tk.CONFIG['upload_url'], timeout=tk.CONFIG['timeout'])
+         if not tk.check_login(page):
+@@ -94,6 +98,10 @@ def run_batch(
+                     tk.add_product_link(page, job.product_id, job.product_display_name)
+                     on_progress({'type': 'step', 'index': i, 'step': 'product_link'})
+ 
++                if job.ai_generated:
++                    tk.set_ai_label(page)
++                    on_progress({'type': 'step', 'index': i, 'step': 'ai_label'})
++
+                 if job.mode not in ('draft', 'dry_run'):
+                     tk.set_schedule(page, job.schedule_date, job.schedule_time)
+                     on_progress({'type': 'step', 'index': i, 'step': 'schedule'})
+diff --git a/backend/roxy_browser.py b/backend/roxy_browser.py
+new file mode 100644
+index 0000000..01dd3f3
+--- /dev/null
++++ b/backend/roxy_browser.py
+@@ -0,0 +1,93 @@
++"""Attach Playwright to an explicitly selected RoxyBrowser profile."""
++
++import json
++import os
++from pathlib import Path
++from urllib.parse import urlencode, urlparse
++from urllib.request import Request, urlopen
++
++
++CONFIG_FILE = Path(__file__).resolve().parents[3] / "data" / "roxy-browser.json"
++PROFILE_ROOT = Path(os.environ.get("APPDATA", "")) / "RoxyBrowser" / "browser-cache"
++# Set by a batch run that targets a specific profile; batches run one at a time.
++profile_override = None
++
++
++def config():
++    if not CONFIG_FILE.is_file():
++        return {}
++    return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
++
++
++def selected():
++    return os.environ.get("TIKTOK_BROWSER", config().get("mode", "chrome")).lower() == "roxy"
++
++
++def _setting(name, environment):
++    return os.environ.get(environment) or config().get(name)
++
++
++def _request(path, method="GET", body=None):
++    port = int(_setting("api_port", "ROXY_API_PORT") or 50000)
++    if not 1 <= port <= 65535:
++        raise RuntimeError("Invalid RoxyBrowser API port")
++    token = _setting("api_token", "ROXY_API_TOKEN")
++    if not token:
++        raise RuntimeError("Set ROXY_API_TOKEN or api_token in data/roxy-browser.json")
++    url = f"http://127.0.0.1:{port}{path}"
++    payload = json.dumps(body).encode("utf-8") if body is not None else None
++    request = Request(url, data=payload, method=method, headers={"token": token, "Content-Type": "application/json"})
++    try:
++        with urlopen(request, timeout=30) as response:
++            result = json.load(response)
++    except OSError as error:
++        raise RuntimeError("RoxyBrowser OpenAPI is unavailable; enable it in API Configuration") from error
++    if result.get("code") != 0:
++        raise RuntimeError(f"RoxyBrowser API failed: {result.get('msg', 'unknown error')}")
++    return result.get("data")
++
++
++def connect(playwright):
++    profile_id = profile_override or _setting("profile_id", "ROXY_PROFILE_ID")
++    workspace_id = _setting("workspace_id", "ROXY_WORKSPACE_ID")
++    if not profile_id or not str(profile_id).isalnum():
++        raise RuntimeError("Set a valid RoxyBrowser profile_id in data/roxy-browser.json")
++    def via_api():
++        if not workspace_id:
++            raise RuntimeError("Open the selected RoxyBrowser profile, or configure workspace_id and OpenAPI")
++        try:
++            opened = _request("/browser/connection_info?" + urlencode({"dirIds": str(profile_id)}))
++            current = next((item for item in opened if item.get("dirId") == str(profile_id)), None) if isinstance(opened, list) else None
++            data = current or _request("/browser/open", "POST", {"workspaceId": str(workspace_id), "dirId": str(profile_id), "forceOpen": False})
++            return data.get("ws") if isinstance(data, dict) else None
++        except RuntimeError as error:
++            raise RuntimeError("Open the selected RoxyBrowser profile manually or enable its OpenAPI") from error
++
++    def attach(endpoint):
++        parsed = urlparse(endpoint or "")
++        if parsed.scheme != "ws" or parsed.hostname not in {"127.0.0.1", "localhost"}:
++            raise RuntimeError("RoxyBrowser returned an invalid local CDP endpoint")
++        return playwright.chromium.connect_over_cdp(endpoint)
++
++    # DevToolsActivePort outlives a closed profile, so a failed attach through it falls back
++    # to the OpenAPI, which reports the running endpoint or opens the profile.
++    active_port = PROFILE_ROOT / str(profile_id) / "DevToolsActivePort"
++    browser = None
++    if active_port.is_file():
++        lines = active_port.read_text(encoding="utf-8").splitlines()
++        if len(lines) >= 2 and lines[0].isdigit() and lines[1].startswith("/devtools/browser/"):
++            try:
++                browser = attach(f"ws://127.0.0.1:{lines[0]}{lines[1]}")
++            except Exception:
++                browser = None
++    if browser is None:
++        try:
++            browser = attach(via_api())
++        except RuntimeError:
++            raise
++        except Exception as error:
++            raise RuntimeError("RoxyBrowser profile is not reachable; reopen it and retry") from error
++    if not browser.contexts:
++        browser.close()
++        raise RuntimeError("RoxyBrowser profile has no browser context")
++    return browser, browser.contexts[0]
+diff --git a/backend/server.py b/backend/server.py
+index 108547e..c494e39 100644
+--- a/backend/server.py
++++ b/backend/server.py
+@@ -512,12 +512,14 @@ class JobIn(BaseModel):
+     add_music: bool = True
+     music_pick_range: tuple[int, int] = (1, 8)
+     music_volume_db: int = -20
++    ai_generated: bool = False  # bật "Nội dung do AI tạo" (bắt buộc với video AI theo quy định TikTok)
+ 
+ 
+ class BatchRunBody(BaseModel):
+     mode: str = "schedule"  # 'schedule' | 'draft' | 'dry_run'
+     delay_between_posts: int = 12
+     jobs: list[JobIn]
++    roxy_profile_id: Optional[str] = None  # đăng bằng profile Roxy này thay vì profile trong cấu hình
+ 
+ 
+ # batch_id -> Queue chứa các event tiến độ (dict) do worker thread đẩy vào
+@@ -542,6 +544,7 @@ def _run_batch_worker(batch_id: str, body: BatchRunBody):
+             product_id=j.product_id,
+             product_display_name=j.product_display_name,
+             add_music=j.add_music,
++            ai_generated=j.ai_generated,
+             music_pick_range=j.music_pick_range,
+             music_volume_db=j.music_volume_db,
+             mode=body.mode,
+@@ -549,11 +552,16 @@ def _run_batch_worker(batch_id: str, body: BatchRunBody):
+         for j in body.jobs
+     ]
+ 
++    import roxy_browser
++    roxy_browser.profile_override = body.roxy_profile_id
+     try:
+         run_batch(jobs, on_progress=on_progress, delay_between_posts=body.delay_between_posts)
+     except Exception as e:  # noqa: BLE001 - báo lỗi bất kỳ về cho UI thay vì làm chết thread âm thầm
++        import traceback
++        traceback.print_exc()
+         q.put({"type": "fatal", "message": str(e)})
+     finally:
++        roxy_browser.profile_override = None
+         q.put({"type": "__end__"})
+ 
+ 
+@@ -565,8 +573,11 @@ def batch_run(body: BatchRunBody):
+     # Trỏ đúng cookie/session của tài khoản đang active TRƯỚC khi spawn thread
+     # chạy Playwright - phải làm ở request thread (đồng bộ) để chắc chắn xong
+     # trước khi worker thread bắt đầu đọc tk.CONFIG.
+-    if not _apply_active_account():
++    import roxy_browser
++    if not _apply_active_account() and not roxy_browser.selected():
+         raise HTTPException(400, "Chưa có tài khoản nào được lưu - vào bước Đăng nhập thêm tài khoản trước.")
++    if body.roxy_profile_id is not None and (not roxy_browser.selected() or not body.roxy_profile_id.isalnum()):
++        raise HTTPException(400, "roxy_profile_id chỉ dùng khi bật chế độ RoxyBrowser và phải là ID hợp lệ")
+ 
+     batch_id = str(uuid.uuid4())
+     _batches[batch_id] = queue.Queue()
+diff --git a/backend/shopee_uploader.py b/backend/shopee_uploader.py
+index 430b23d..c567f50 100644
+--- a/backend/shopee_uploader.py
++++ b/backend/shopee_uploader.py
+@@ -309,7 +309,7 @@ def add_product_link(page, product_query, product_id=None):
+         if candidate.count() > 0:
+             row = candidate.first
+         else:
+-            print(f"  ⚠ Không thấy đúng sản phẩm ID {product_id} trong kết quả - chọn dòng đầu tiên thay thế")
++            raise ValueError(f"Không tìm thấy sản phẩm Shopee ID {product_id} trong kết quả tìm kiếm")
+     if row is None:
+         row = modal.locator('tbody tr[data-row-key]').first
+ 
+diff --git a/backend/tiktok_uploader.py b/backend/tiktok_uploader.py
+index 6dc756f..fc01239 100644
+--- a/backend/tiktok_uploader.py
++++ b/backend/tiktok_uploader.py
+@@ -105,6 +105,9 @@ CONFIG = {
+ def resolve_binary(name):
+     """Tìm executable trong PATH, fallback về vị trí winget phổ biến trên Windows."""
+     import os
++    local_binary = BASE_DIR.parents[2] / 'tools' / f'{name}.exe'
++    if local_binary.is_file():
++        return str(local_binary)
+     found = shutil.which(name)
+     if found:
+         return found
+@@ -150,6 +153,9 @@ def ensure_login(playwright):
+     thay vì mỗi lần chạy đều bị coi là lần đầu (tránh hiện lại tutorial popup
+     "Got it" mỗi lần). Chỉ khi chưa có file này mới cần nạp cookie thô từ F12.
+     """
++    import roxy_browser
++    if roxy_browser.selected():
++        return roxy_browser.connect(playwright)
+     browser = playwright.chromium.launch(channel='chrome', headless=CONFIG['headless'])
+     session_file = Path(CONFIG['session_state_file'])
+ 
+@@ -181,6 +187,9 @@ def ensure_login(playwright):
+ def save_session_state(context):
+     """Lưu lại cookie + localStorage sau khi login thành công, để lần chạy sau
+     không cần dán lại cookie từ F12 nữa."""
++    import roxy_browser
++    if roxy_browser.selected():
++        return
+     context.storage_state(path=CONFIG['session_state_file'])
+     print(f"  💾 Đã lưu session vào {CONFIG['session_state_file']}")
+ 
+@@ -194,7 +203,19 @@ def dismiss_popups(page, max_attempts=3):
+     dismissed = 0
+     for _ in range(max_attempts):
+         try:
+-            page.locator('[class*="tooltip__footer"] button').first.click(timeout=1000)
++            candidates = page.locator(
++                '[class*="tooltip__footer"] button, '
++                '.react-joyride__tooltip button[data-action="skip"], '
++                '.react-joyride__tooltip button[data-action="close"], '
++                '.react-joyride__tooltip button[data-action="primary"]'
++            )
++            if candidates.count():
++                candidates.first.click(timeout=1000)
++            else:
++                modal = page.locator('[role="dialog"]').filter(
++                    has_text='Chúng tôi sẽ tự động kiểm tra'
++                )
++                modal.get_by_role('button', name='Đã hiểu', exact=True).click(timeout=1000)
+             page.wait_for_timeout(400)
+             dismissed += 1
+         except Exception:
+@@ -235,7 +256,8 @@ def upload_video_file(page, video_path):
+     print(f"\n📤 Upload video: {video_path}")
+     dismiss_popups(page)  # tutorial tooltip hay hiện ngay khi vừa vào trang upload
+     file_input = page.locator('input[type="file"]').first
+-    file_input.set_input_files(str(video_path))
++    # Over a Roxy CDP connection the file travels in chunks; tens of MB need well over the 30 s default.
++    file_input.set_input_files(str(video_path), timeout=300000)
+ 
+     # Đợi TikTok xử lý xong video và hiện khung caption (data-e2e ổn định,
+     # không phụ thuộc ngôn ngữ UI - khác với chờ text "Mô tả"/"Description")
+@@ -248,11 +270,54 @@ def upload_video_file(page, video_path):
+     # dung lượt trước khi chạy batch nhiều video liên tiếp).
+     time.sleep(4)
+     dismiss_popups(page)  # có thể hiện thêm tooltip khác sau khi video xử lý xong
++    accept_content_checks(page)
+     print("  ✓ Video đã upload xong")
+ 
+ 
++def set_ai_label(page):
++    """Bật "Nội dung do AI tạo" (Hiển thị thêm → công tắc → hộp xác nhận "Bật").
++    TikTok yêu cầu nhãn này cho nội dung hoàn toàn do AI tạo hoặc chỉnh sửa đáng kể."""
++    for label in ("Hiển thị thêm", "Show more"):
++        more = page.get_by_text(label, exact=True)
++        if more.count() and more.first.is_visible():
++            more.first.click()
++            time.sleep(1)
++            break
++    title = page.get_by_text("Nội dung do AI tạo", exact=True)
++    if not title.count():
++        title = page.get_by_text("AI-generated content", exact=True)
++    row = page.locator('div').filter(has=title.first).filter(has=page.locator('input[role="switch"]')).last
++    switch = row.locator('input[role="switch"]').first
++    if switch.is_checked():
++        return
++    toggle = row.locator('[class*=Switch]').first
++    (toggle if toggle.count() else switch).click(force=not toggle.count())
++    time.sleep(1.5)
++    dialog = page.locator('.TUXModal-overlay').filter(has_text="nội dung do AI tạo")
++    if not dialog.count():
++        dialog = page.locator('.TUXModal-overlay').filter(has_text="AI-generated")
++    if dialog.count() and dialog.first.is_visible():
++        dialog.first.get_by_role("button", name="Bật", exact=True).or_(dialog.first.get_by_role("button", name="Turn on", exact=True)).first.click(timeout=10000)
++        time.sleep(1)
++    if not switch.is_checked():
++        raise RuntimeError("Không bật được nhãn Nội dung do AI tạo")
++    print("  ✓ Đã gắn nhãn Nội dung do AI tạo")
++
++
++def accept_content_checks(page):
++    """Tài khoản đăng lần đầu trên Studio bị hỏi "Bật kiểm tra nội dung tự động?" (kiểm tra
++    bản quyền nhạc + đủ điều kiện lên Đề xuất); modal này chặn ô caption. Chủ tài khoản đã
++    chọn Bật cho mọi tài khoản. Chỉ hiện một lần cho mỗi tài khoản."""
++    modal = page.locator('.TUXModal-overlay').filter(has_text="Bật kiểm tra nội dung tự động")
++    if modal.count() and modal.first.is_visible():
++        modal.first.get_by_role("button", name="Bật", exact=True).click(timeout=10000)
++        time.sleep(1)
++        print("  ✓ Đã bật kiểm tra nội dung tự động")
++
++
+ def set_caption(page, caption_text):
+     print(f"\n📝 Điền mô tả: {caption_text[:60]}...")
++    dismiss_popups(page, max_attempts=6)
+     caption_box = page.locator('[data-e2e="caption_container"] div[contenteditable="true"]').first
+     caption_box.click()
+     page.keyboard.press("Control+A")
+@@ -318,7 +383,11 @@ def set_cover(page, video_path, second=None, image_path=None):
+     save_btn.wait_for(state='visible')
+     page.wait_for_timeout(3000)
+ 
+-    save_btn.click()
++    try:
++        save_btn.click(timeout=10000)
++    except Exception:
++        # Cửa sổ profile hẹp làm nút Lưu tràn khỏi màn hình; bấm thẳng qua DOM.
++        save_btn.evaluate('button => button.click()')
+     time.sleep(1)
+     print("  ✓ Đã đặt ảnh bìa")
+ 
+@@ -534,6 +603,14 @@ def publish(page):
+     # bất kể chọn "Now" hay "Schedule"
+     page.locator('[data-e2e="post_video_button"]').click()
+ 
++    # Studio asks for confirmation while its optional preflight is still running.
++    try:
++        page.get_by_text('Tiếp tục đăng?', exact=True).wait_for(timeout=5000)
++    except Exception:
++        pass
++    else:
++        page.get_by_role('button', name='Đăng ngay', exact=True).click()
++
+     # Kiểm tra popup chặn kiểm duyệt NGAY (không đợi hết 45s wait_for_url bên
+     # dưới rồi mới phát hiện) - raise ContentModerationBlocked nếu bị chặn,
+     # dừng hẳn ở đây (không chạy tiếp phần chờ URL đổi trang).
+@@ -551,10 +628,11 @@ def publish(page):
+         # khi video kế tiếp bắt đầu (goto lại trang upload ngay có thể phá giữa
+         # chừng quá trình submit, gây lẫn dữ liệu giữa 2 video liên tiếp).
+         time.sleep(5)
+-    except Exception:
+-        print("  ⚠ Không thấy URL chuyển trang sau 45s - có thể vẫn đang xử lý hoặc "
+-              "flow khác dự kiến, kiểm tra lại thủ công trên browser.")
+-        time.sleep(3)
++    except Exception as exc:
++        raise RuntimeError(
++            "Chưa xác nhận được kết quả đăng trên TikTok. Kiểm tra TikTok Studio "
++            "trước khi thử lại để tránh đăng trùng."
++        ) from exc
+ 
+ 
+ def save_draft(page):

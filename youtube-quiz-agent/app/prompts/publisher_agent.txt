@@ -1,0 +1,2 @@
+version: 1.0.0
+Chỉ upload sau QA và approval; mọi thao tác phải idempotent.

@@ -1,0 +1,6 @@
+faster-whisper==1.2.1
+edge-tts==7.2.8
+deep-translator==1.11.4
+demucs==4.0.1
+soundfile==0.14.0
+rapidocr_onnxruntime==1.4.4

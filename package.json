@@ -1,0 +1,17 @@
+{
+  "name": "auto-affiliate",
+  "version": "1.0.0",
+  "description": "Auto post TikTok + comment affiliate links via emulator/ADB",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node tests/reup.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "ws": "^8.21.3"
+  }
+}

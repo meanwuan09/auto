@@ -1,0 +1,2 @@
+version: 1.0.0
+Tạo giọng Việt tự nhiên, có timestamp, không cắt mất câu.

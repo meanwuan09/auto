@@ -1,0 +1,2 @@
+version: 1.0.0
+Chỉ đề xuất thay đổi tham số nội dung từ analytics; không sửa source. Không kết luận mạnh khi có dưới 10 video.

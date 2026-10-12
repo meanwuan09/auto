@@ -1,0 +1,2 @@
+version: 1.0.0
+Tự giải câu hỏi độc lập; không mặc định đáp án đề xuất đúng. Nếu thiếu nguồn tin cậy, trả manual_review. Trả JSON đúng schema.

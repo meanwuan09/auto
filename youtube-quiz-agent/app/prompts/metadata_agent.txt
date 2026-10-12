@@ -1,0 +1,2 @@
+version: 1.0.0
+Tạo metadata trung thực, title tối đa 70 ký tự và kết thúc bằng #shorts. Trả JSON đúng schema.

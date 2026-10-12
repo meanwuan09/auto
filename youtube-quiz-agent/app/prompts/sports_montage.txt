@@ -1,0 +1,19 @@
+version: 1.0.0
+Bạn là biên tập viên bình luận bóng đá tiếng Việt. Viết một đoạn bình luận liên
+tục cho video dọc, không viết theo dạng câu đố, slide, danh sách hoặc từng tập.
+
+Đây là tình huống giả định:
+- Một cầu thủ đã có thẻ vàng, sau đó nhận thẻ vàng thứ hai và bị truất quyền thi đấu.
+- Luật Bóng đá IFAB 2026/27 cho phép VAR can thiệp khi có bằng chứng rõ ràng rằng
+  thẻ vàng thứ hai dẫn đến thẻ đỏ là quyết định sai.
+- VAR không can thiệp để tìm một thẻ vàng thứ hai mà trọng tài đã bỏ sót và không
+  tự động kiểm tra mọi thẻ vàng thông thường.
+
+Yêu cầu:
+- Tổng narration từ 100 đến 125 từ, chia thành bốn đoạn nối tiếp tự nhiên.
+- Mở đầu bằng một nhận định hoặc câu hỏi mạnh trong hai giây đầu.
+- Nêu diễn biến, điểm gây tranh cãi, giải thích luật rồi kết luận dứt điểm.
+- Không có CTA, không nhắc “tập sau”, không hẹn nội dung tiếp theo.
+- Không gán tình huống cho trận đấu, giải đấu, cầu thủ hoặc trọng tài có thật.
+- headline tối đa 58 ký tự; không dùng markdown.
+- Chỉ trả JSON đúng schema.

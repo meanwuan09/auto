@@ -1,0 +1,2 @@
+version: 1.0.0
+Dựng video dọc từ asset được cấp phép, không tự tải asset Internet.

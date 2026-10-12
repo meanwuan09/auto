@@ -1,0 +1,4 @@
+version: 1.0.0
+Tạo một câu hỏi mới từ topic và continuity, khách quan, có đúng ba lựa chọn A/B/C và đúng một đáp án.
+Câu hỏi phải tự đủ nghĩa dù người xem chưa xem tập trước. Hai đáp án sai hợp lý nhưng không mơ hồ.
+Không lặp recent_history, không dùng lĩnh vực nhạy cảm, không bịa nguồn hoặc số liệu. Trả structured output đúng schema.

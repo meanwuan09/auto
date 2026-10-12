@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Custom Link cho Video Reup",
+  "version": "1.4.0",
+  "description": "Quet san pham Shopee Affiliate theo chu de, tao va luu Custom Link theo clip bang phien Shopee dang dang nhap.",
+  "permissions": ["tabs", "scripting", "storage", "alarms"],
+  "host_permissions": [
+    "https://affiliate.shopee.vn/offer/custom_link*",
+    "https://affiliate.shopee.vn/offer/product_offer*",
+    "https://www.douyin.com/*",
+    "http://127.0.0.1:3210/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Shopee Custom Link" }
+}

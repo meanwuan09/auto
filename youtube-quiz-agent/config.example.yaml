@@ -1,0 +1,36 @@
+channel_name: "Học Nhanh 30 Giây"
+niche: "Tiếng Anh giao tiếp"
+target_audience: "Người Việt Nam từ 16–35 tuổi"
+default_language: vi
+default_difficulty: beginner
+target_duration_seconds: 35
+daily_video_limit: 1
+default_publish_time: "20:00"
+timezone: Asia/Ho_Chi_Minh
+auto_publish: false
+fact_check_threshold: 0.90
+duplicate_threshold: 0.86
+max_generation_attempts: 3
+llm_provider: mock
+tts_provider: mock
+gemini_llm_model: gemini-2.5-flash
+gemini_tts_model: gemini-3.1-flash-tts-preview
+gemini_voice: Kore
+gemini_voice_style: "Giọng nữ trẻ, rõ ràng, thân thiện; phát âm tiếng Việt tự nhiên và từ tiếng Anh chuẩn; nhịp nhanh vừa phải."
+deepseek_api_base_url: https://api.deepseek.com
+deepseek_model: deepseek-v4-flash
+genmax_api_base_url: https://api.genmax.io/v1
+genmax_voice_id: ""
+genmax_model_id: eleven_v3
+genmax_engine: elevenlabs
+genmax_language: vi
+series_enabled: true
+series_title: "Tiếng Anh dùng được ngay"
+series_memory_size: 5
+database_url: sqlite:///data/yqa.db
+output_dir: output
+emergency_stop: false
+kill_switch: false
+pause_dates: []
+categories: [vocabulary, grammar, pronunciation, common_mistakes, workplace_english, daily_conversation]
+difficulty_weights: {beginner: 0.60, intermediate: 0.35, advanced: 0.05}
